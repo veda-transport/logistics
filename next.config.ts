@@ -2,8 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "export",
-  basePath: "/veda-transport",
-  assetPrefix: "/veda-transport/",
+  basePath: process.env.NEXT_PUBLIC_BASE_PATH || "/logistics",
+  assetPrefix: (process.env.NEXT_PUBLIC_BASE_PATH || "/logistics") + "/",
   images: {
     unoptimized: true,
   },
