@@ -1,0 +1,155 @@
+@import "tailwindcss";
+
+@theme {
+  /* Color Palette */
+  --color-primary: #0b0f19;
+  --color-primary-light: #161f33;
+  --color-primary-dark: #070a12;
+  --color-accent: #ff6a00;
+  --color-accent-hover: #e05d00;
+  --color-accent-light: #ff9f59;
+  
+  /* Fonts mapping (using Next.js font variables) */
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-display: var(--font-outfit), sans-serif;
+  
+  /* Premium Shadows */
+  --shadow-premium: 0 10px 40px -15px rgba(0, 0, 0, 0.4);
+  --shadow-glass: 0 8px 32px 0 rgba(7, 10, 18, 0.37);
+  --shadow-glow: 0 0 15px rgba(255, 106, 0, 0.3);
+  
+  /* Custom Animations */
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-pulse-slow: pulseSlow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-infinite-scroll: infiniteScroll 25s linear infinite;
+  --animate-road-move: roadMove 1.5s linear infinite;
+  --animate-wheel-spin: wheelSpin 0.6s linear infinite;
+  --animate-cloud-move: cloudMove 15s linear infinite;
+  --animate-glow-trail: glowTrail 2s linear infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes pulseSlow {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.3; }
+}
+
+@keyframes infiniteScroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes roadMove {
+  0% { background-position-x: 0px; }
+  100% { background-position-x: -120px; }
+}
+
+@keyframes wheelSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes cloudMove {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+
+@keyframes glowTrail {
+  0% { stroke-dashoffset: 100; }
+  100% { stroke-dashoffset: 0; }
+}
+
+:root {
+  --background: #0b0f19;
+  --foreground: #ffffff;
+  scroll-behavior: initial; /* Handled by Lenis smooth scroll */
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0b0f19;
+}
+::-webkit-scrollbar-thumb {
+  background: #161f33;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #ff6a00;
+}
+
+/* Custom Utilities for Premium Look */
+.glass-panel {
+  background: rgba(22, 31, 51, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-panel-light {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glass-nav {
+  background: rgba(11, 15, 25, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #ffffff 30%, #a5b4fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-accent {
+  background: linear-gradient(135deg, #ff8a00 0%, #ff6a00 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.bg-gradient-premium {
+  background: linear-gradient(135deg, #161f33 0%, #0b0f19 100%);
+}
+
+.bg-gradient-glow {
+  background: radial-gradient(circle at center, rgba(255, 106, 0, 0.15) 0%, rgba(11, 15, 25, 0) 70%);
+}
+
+.grid-bg {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+}
+
+/* Lenis Custom Integration */
+html.lenis {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+.lenis.lenis-scrolling iframe {
+  pointer-events: none;
+}
