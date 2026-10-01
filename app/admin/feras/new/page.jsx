@@ -10,9 +10,13 @@ import {
   UploadCloud, 
   CheckCircle2, 
   Loader2,
-  AlertCircle 
+  AlertCircle,
+  Sparkles,
+  MapPin,
+  Calendar,
+  Truck
 } from 'lucide-react';
-import { supabase, getActiveOrgId, uploadFileToCloudinary } from '@/lib/supabase';
+import { supabase, getActiveOrgId, uploadFileToCloudinary, deleteFileFromStorage } from '@/lib/supabase';
 
 export default function NewFeraPage() {
   const router = useRouter();
@@ -27,10 +31,10 @@ export default function NewFeraPage() {
   const [materials, setMaterials] = useState([]);
   const [locations, setLocations] = useState([]);
 
-  // Form State with deterministic default
+  // Form State
   const [formData, setFormData] = useState({
-    feraNumber: 'FERA-100125',
-    feraDate: '2026-10-01',
+    feraNumber: `FERA-${Math.floor(100000 + Math.random() * 900000)}`,
+    feraDate: new Date().toISOString().split('T')[0],
     partyId: '',
     truckId: '',
     driverId: '',
@@ -133,10 +137,15 @@ export default function NewFeraPage() {
     setExpenses(expenses.filter((_, i) => i !== index));
   };
 
-  // Direct Cloudinary Upload from Browser
+  // File Upload
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // If there was an earlier uploaded file before saving, clean it up
+    if (formData.documentUrl) {
+      deleteFileFromStorage(formData.documentUrl);
+    }
 
     setUploadingDoc(true);
     try {
@@ -148,10 +157,21 @@ export default function NewFeraPage() {
       }));
     } catch (err) {
       console.error(err);
-      alert('Upload failed: ' + (err.message || 'Please check Cloudinary keys in .env'));
+      alert('Upload failed: ' + (err.message || 'Please check the file and try again'));
     } finally {
       setUploadingDoc(false);
     }
+  };
+
+  const handleRemoveUploadedDoc = () => {
+    if (formData.documentUrl) {
+      deleteFileFromStorage(formData.documentUrl);
+    }
+    setFormData((prev) => ({
+      ...prev,
+      documentUrl: '',
+      documentName: '',
+    }));
   };
 
   // Live Math calculations
@@ -231,10 +251,10 @@ export default function NewFeraPage() {
         ]);
       }
 
-      alert('Fera recorded successfully in Supabase!');
+      alert('Trip recorded successfully!');
       router.push('/admin/feras');
     } catch (err) {
-      alert('Error saving fera: ' + err.message);
+      alert('Error saving trip: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -242,26 +262,29 @@ export default function NewFeraPage() {
 
   if (dataLoading) {
     return (
-      <div className="p-16 text-center text-slate-400 flex flex-col items-center gap-3">
-        <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
-        <p className="text-sm">Loading dropdown masters from Supabase...</p>
+      <div className="p-16 text-center text-slate-400 flex flex-col items-center gap-3 bg-[#0c1220]/60 rounded-3xl border border-amber-500/20">
+        <Loader2 className="w-8 h-8 animate-spin text-amber-400" />
+        <p className="text-sm font-bold text-amber-200">Loading form data...</p>
       </div>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8 max-w-5xl mx-auto pb-12">
-      {/* Top Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+    <form onSubmit={handleSubmit} className="space-y-6 max-w-5xl mx-auto pb-12">
+      {/* Top Header Card */}
+      <div className="p-4 sm:p-6 bg-[#0c1220]/95 backdrop-blur-xl border border-amber-500/30 rounded-3xl shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
           <Link
             href="/admin/feras"
-            className="p-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 hover:text-white transition-all"
+            className="p-2.5 bg-[#131c33] border border-amber-500/20 rounded-2xl text-amber-300 hover:text-white hover:bg-amber-500/10 transition-all"
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
-            <h1 className="text-2xl font-extrabold text-white">Create New Fera (Trip)</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">Create New Fera (Trip)</h1>
+              <Sparkles className="w-4 h-4 text-amber-400" />
+            </div>
             <p className="text-xs text-slate-400">Record trip dispatch, assign truck & driver, and log route expenses.</p>
           </div>
         </div>
@@ -269,10 +292,10 @@ export default function NewFeraPage() {
         <button
           type="submit"
           disabled={loading}
-          className="flex items-center gap-2 px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl shadow-lg shadow-amber-500/20 text-sm transition-all"
+          className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl shadow-lg shadow-amber-500/25 text-xs sm:text-sm transition-all hover:scale-[1.02] border border-amber-300/30 self-end sm:self-auto cursor-pointer"
         >
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-          <span>Save to Supabase</span>
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />}
+          <span>Save Trip / Fera</span>
         </button>
       </div>
 
@@ -287,61 +310,61 @@ export default function NewFeraPage() {
       )}
 
       {/* Live Profit Preview Banner */}
-      <div className="p-6 bg-gradient-to-r from-slate-900 to-slate-950 border border-slate-800 rounded-2xl grid grid-cols-1 sm:grid-cols-4 gap-4 shadow-xl">
-        <div>
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Party Billing</span>
-          <p className="text-xl font-black text-white mt-1">₹{totalAgreed.toLocaleString('en-IN')}</p>
+      <div className="p-5 sm:p-6 bg-[#0c1220]/90 backdrop-blur-xl border border-amber-500/30 rounded-3xl grid grid-cols-2 lg:grid-cols-4 gap-4 shadow-xl">
+        <div className="p-3 bg-[#070b14]/60 rounded-2xl border border-amber-500/15">
+          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">Party Billing</span>
+          <p className="text-lg sm:text-2xl font-black text-white mt-1">₹{totalAgreed.toLocaleString('en-IN')}</p>
         </div>
-        <div>
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Expenses</span>
-          <p className="text-xl font-black text-rose-400 mt-1">-₹{totalExpenses.toLocaleString('en-IN')}</p>
+        <div className="p-3 bg-[#070b14]/60 rounded-2xl border border-rose-500/20">
+          <span className="text-[10px] font-extrabold text-rose-400 uppercase tracking-widest block">Total Expenses</span>
+          <p className="text-lg sm:text-2xl font-black text-rose-400 mt-1">-₹{totalExpenses.toLocaleString('en-IN')}</p>
         </div>
-        <div>
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Estimated Net Profit</span>
-          <p className="text-xl font-black text-emerald-400 mt-1">₹{netProfit.toLocaleString('en-IN')}</p>
+        <div className="p-3 bg-[#070b14]/60 rounded-2xl border border-emerald-500/20">
+          <span className="text-[10px] font-extrabold text-emerald-400 uppercase tracking-widest block">Estimated Net Profit</span>
+          <p className="text-lg sm:text-2xl font-black text-emerald-400 mt-1">₹{netProfit.toLocaleString('en-IN')}</p>
         </div>
-        <div>
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Net Margin</span>
-          <p className="text-xl font-black text-amber-400 mt-1">{marginPercent}%</p>
+        <div className="p-3 bg-[#070b14]/60 rounded-2xl border border-amber-500/20">
+          <span className="text-[10px] font-extrabold text-amber-400 uppercase tracking-widest block">Net Margin</span>
+          <p className="text-lg sm:text-2xl font-black text-amber-400 mt-1">{marginPercent}%</p>
         </div>
       </div>
 
       {/* 1. Trip Master Info */}
-      <div className="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-6 space-y-6">
-        <h2 className="text-base font-bold text-white flex items-center gap-2">
-          <span className="w-6 h-6 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center text-xs">1</span>
-          Trip Dispatch Details
+      <div className="bg-[#0c1220]/90 backdrop-blur-xl border border-amber-500/20 rounded-3xl p-5 sm:p-7 space-y-5 shadow-xl">
+        <h2 className="text-sm sm:text-base font-extrabold text-white flex items-center gap-2.5">
+          <span className="w-7 h-7 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center text-xs font-black shadow-md shadow-amber-500/30">1</span>
+          <span>Trip Dispatch Details</span>
         </h2>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
           <div>
-            <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Fera Number *</label>
+            <label className="text-xs font-bold text-amber-300 mb-1.5 block">Fera Number *</label>
             <input
               type="text"
               required
               value={formData.feraNumber}
               onChange={(e) => setFormData({ ...formData, feraNumber: e.target.value })}
-              className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white font-mono uppercase"
+              className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white font-mono uppercase focus:border-amber-400 focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Fera Date *</label>
+            <label className="text-xs font-bold text-amber-300 mb-1.5 block">Fera Date *</label>
             <input
               type="date"
               required
               value={formData.feraDate}
               onChange={(e) => setFormData({ ...formData, feraDate: e.target.value })}
-              className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white"
+              className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:border-amber-400 focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Trip Status</label>
+            <label className="text-xs font-bold text-amber-300 mb-1.5 block">Trip Status</label>
             <select
               value={formData.status}
               onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-              className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white"
+              className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:border-amber-400 focus:outline-none"
             >
               <option value="in_progress">In Progress</option>
               <option value="planned">Planned</option>
@@ -352,12 +375,12 @@ export default function NewFeraPage() {
 
           {/* Party */}
           <div>
-            <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Party / Client *</label>
+            <label className="text-xs font-bold text-amber-300 mb-1.5 block">Party / Client *</label>
             <select
               required
               value={formData.partyId}
               onChange={(e) => setFormData({ ...formData, partyId: e.target.value })}
-              className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white"
+              className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:border-amber-400 focus:outline-none"
             >
               {parties.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
@@ -367,12 +390,12 @@ export default function NewFeraPage() {
 
           {/* Truck */}
           <div>
-            <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Assigned Truck *</label>
+            <label className="text-xs font-bold text-amber-300 mb-1.5 block">Assigned Truck *</label>
             <select
               required
               value={formData.truckId}
               onChange={(e) => setFormData({ ...formData, truckId: e.target.value })}
-              className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white font-mono"
+              className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white font-mono focus:border-amber-400 focus:outline-none"
             >
               {trucks.map((t) => (
                 <option key={t.id} value={t.id}>{t.truck_number} ({t.truck_type})</option>
@@ -382,7 +405,7 @@ export default function NewFeraPage() {
 
           {/* Driver */}
           <div>
-            <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Assigned Driver *</label>
+            <label className="text-xs font-bold text-amber-300 mb-1.5 block">Assigned Driver *</label>
             <select
               required
               value={formData.driverId}
@@ -394,7 +417,7 @@ export default function NewFeraPage() {
                   driverCommission: sel ? sel.commission_value : 0
                 });
               }}
-              className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white"
+              className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:border-amber-400 focus:outline-none"
             >
               {drivers.map((d) => (
                 <option key={d.id} value={d.id}>{d.name}</option>
@@ -405,20 +428,20 @@ export default function NewFeraPage() {
       </div>
 
       {/* 2. Route, Material & Revenue Details */}
-      <div className="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-6 space-y-6">
-        <h2 className="text-base font-bold text-white flex items-center gap-2">
-          <span className="w-6 h-6 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center text-xs">2</span>
-          Route, Material & Revenue
+      <div className="bg-[#0c1220]/90 backdrop-blur-xl border border-amber-500/20 rounded-3xl p-5 sm:p-7 space-y-5 shadow-xl">
+        <h2 className="text-sm sm:text-base font-extrabold text-white flex items-center gap-2.5">
+          <span className="w-7 h-7 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center text-xs font-black shadow-md shadow-amber-500/30">2</span>
+          <span>Route, Material & Revenue</span>
         </h2>
 
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
           <div>
-            <label className="text-xs font-semibold text-slate-400 mb-1.5 block">From Location *</label>
+            <label className="text-xs font-bold text-amber-300 mb-1.5 block">From Location *</label>
             <select
               required
               value={formData.fromLocationId}
               onChange={(e) => setFormData({ ...formData, fromLocationId: e.target.value })}
-              className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white"
+              className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:border-amber-400 focus:outline-none"
             >
               {locations.map((l) => (
                 <option key={l.id} value={l.id}>{l.name} ({l.city})</option>
@@ -427,12 +450,12 @@ export default function NewFeraPage() {
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-400 mb-1.5 block">To Location *</label>
+            <label className="text-xs font-bold text-amber-300 mb-1.5 block">To Location *</label>
             <select
               required
               value={formData.toLocationId}
               onChange={(e) => setFormData({ ...formData, toLocationId: e.target.value })}
-              className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white"
+              className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:border-amber-400 focus:outline-none"
             >
               {locations.map((l) => (
                 <option key={l.id} value={l.id}>{l.name} ({l.city})</option>
@@ -441,12 +464,12 @@ export default function NewFeraPage() {
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Material *</label>
+            <label className="text-xs font-bold text-amber-300 mb-1.5 block">Material *</label>
             <select
               required
               value={formData.materialId}
               onChange={(e) => setFormData({ ...formData, materialId: e.target.value })}
-              className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white"
+              className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:border-amber-400 focus:outline-none"
             >
               {materials.map((m) => (
                 <option key={m.id} value={m.id}>{m.name} ({m.unit})</option>
@@ -455,7 +478,7 @@ export default function NewFeraPage() {
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Weight (Tons) *</label>
+            <label className="text-xs font-bold text-amber-300 mb-1.5 block">Weight (Tons) *</label>
             <input
               type="number"
               step="0.01"
@@ -463,59 +486,78 @@ export default function NewFeraPage() {
               placeholder="e.g. 25.5"
               value={formData.weight}
               onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
-              className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white"
+              className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:border-amber-400 focus:outline-none"
             />
           </div>
 
           <div className="sm:col-span-2">
-            <label className="text-xs font-semibold text-amber-400 mb-1.5 block">Party Agreed Billing (₹ Revenue) *</label>
+            <label className="text-xs font-black text-amber-400 mb-1.5 block">Party Agreed Billing (₹ Revenue) *</label>
             <input
               type="number"
               required
               placeholder="e.g. 50000"
               value={formData.agreedAmount}
               onChange={(e) => setFormData({ ...formData, agreedAmount: e.target.value })}
-              className="w-full bg-slate-950/80 border border-amber-500/40 rounded-xl px-4 py-2.5 text-base font-bold text-white"
+              className="w-full bg-[#070b14] border border-amber-400 rounded-xl px-4 py-2.5 text-base font-black text-white focus:ring-2 focus:ring-amber-400/50 focus:outline-none shadow-inner"
             />
           </div>
 
           <div className="sm:col-span-2">
-            <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Driver Commission (₹)</label>
+            <label className="text-xs font-bold text-amber-300 mb-1.5 block">Driver Commission (₹)</label>
             <input
               type="number"
               value={formData.driverCommission}
               onChange={(e) => setFormData({ ...formData, driverCommission: e.target.value })}
-              className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white"
+              className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:border-amber-400 focus:outline-none"
             />
           </div>
         </div>
       </div>
 
       {/* 3. Dynamic Fera Expenses */}
-      <div className="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-white flex items-center gap-2">
-            <span className="w-6 h-6 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center text-xs">3</span>
-            Fera Trip Expenses Breakdown
-          </h2>
+      <div className="bg-[#0c1220]/90 backdrop-blur-xl border border-amber-500/20 rounded-3xl p-5 sm:p-7 space-y-4 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-500/20 pb-4">
+          <div>
+            <h2 className="text-sm sm:text-base font-extrabold text-white flex items-center gap-2.5">
+              <span className="w-7 h-7 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center text-xs font-black shadow-md shadow-amber-500/30">3</span>
+              <span>Trip Expenses Breakdown</span>
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">Track diesel, toll, loading, and trip route costs</p>
+          </div>
           <button
             type="button"
             onClick={addExpenseRow}
-            className="flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20 transition-all"
+            className="flex items-center gap-1.5 text-xs font-extrabold text-amber-300 hover:text-white bg-amber-500/15 hover:bg-amber-500/25 px-4 py-2.5 rounded-xl border border-amber-500/30 transition-all cursor-pointer self-start sm:self-auto shadow-sm"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Expense Line</span>
+            <Plus className="w-4 h-4" />
+            <span>+ Add Expense Line</span>
           </button>
+        </div>
+
+        {/* Desktop Column Header */}
+        <div className="hidden sm:grid grid-cols-12 gap-3 px-4 py-2 bg-[#070b14]/90 border border-amber-500/15 rounded-xl text-[11px] font-extrabold uppercase tracking-wider text-amber-400">
+          <div className="col-span-3">Expense Type</div>
+          <div className="col-span-3">Remarks / Description</div>
+          <div className="col-span-2">Quantity</div>
+          <div className="col-span-2">Rate (₹)</div>
+          <div className="col-span-2 text-right pr-9">Amount (₹)</div>
         </div>
 
         <div className="space-y-3">
           {expenses.map((item, idx) => (
-            <div key={idx} className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+            <div
+              key={idx}
+              className="p-3.5 sm:p-4 bg-[#070b14]/90 hover:bg-[#070b14] border border-amber-500/20 hover:border-amber-500/35 rounded-2xl grid grid-cols-1 sm:grid-cols-12 gap-3 items-center transition-all shadow-md"
+            >
+              {/* Expense Type */}
               <div className="sm:col-span-3">
+                <label className="text-[10px] font-extrabold text-amber-300 uppercase tracking-wider block mb-1 sm:hidden">
+                  Expense Type
+                </label>
                 <select
                   value={item.expenseType}
                   onChange={(e) => handleExpenseChange(idx, 'expenseType', e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200"
+                  className="w-full bg-[#0d1425] border border-amber-500/30 focus:border-amber-400 rounded-xl px-3 py-2.5 text-xs font-bold text-amber-200 focus:outline-none transition-colors cursor-pointer"
                 >
                   <option value="diesel">Diesel</option>
                   <option value="material_purchase">Material Purchase</option>
@@ -530,90 +572,159 @@ export default function NewFeraPage() {
                 </select>
               </div>
 
+              {/* Description */}
               <div className="sm:col-span-3">
+                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1 sm:hidden">
+                  Remarks / Description
+                </label>
                 <input
                   type="text"
-                  placeholder="Description / Remarks"
+                  placeholder="Optional remarks"
                   value={item.description}
                   onChange={(e) => handleExpenseChange(idx, 'description', e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200"
+                  className="w-full bg-[#0d1425] border border-amber-500/20 focus:border-amber-400 rounded-xl px-3 py-2.5 text-xs text-white placeholder:text-slate-600 focus:outline-none transition-colors"
                 />
               </div>
 
+              {/* Quantity */}
               <div className="sm:col-span-2">
+                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1 sm:hidden">
+                  Qty
+                </label>
                 <input
                   type="number"
-                  placeholder="Qty (e.g. 100)"
+                  step="any"
+                  placeholder="Qty"
                   value={item.quantity || ''}
                   onChange={(e) => handleExpenseChange(idx, 'quantity', e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200"
+                  className="w-full bg-[#0d1425] border border-amber-500/20 focus:border-amber-400 rounded-xl px-3 py-2.5 text-xs text-white placeholder:text-slate-600 focus:outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
 
+              {/* Rate */}
               <div className="sm:col-span-2">
-                <input
-                  type="number"
-                  placeholder="Rate (₹)"
-                  value={item.rate || ''}
-                  onChange={(e) => handleExpenseChange(idx, 'rate', e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200"
-                />
+                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1 sm:hidden">
+                  Rate (₹)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">₹</span>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="Rate"
+                    value={item.rate || ''}
+                    onChange={(e) => handleExpenseChange(idx, 'rate', e.target.value)}
+                    className="w-full bg-[#0d1425] border border-amber-500/20 focus:border-amber-400 rounded-xl pl-6 pr-3 py-2.5 text-xs text-white placeholder:text-slate-600 focus:outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                </div>
               </div>
 
-              <div className="sm:col-span-1">
-                <input
-                  type="number"
-                  placeholder="Amount ₹"
-                  value={item.amount}
-                  onChange={(e) => handleExpenseChange(idx, 'amount', e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs font-bold text-rose-400"
-                />
-              </div>
-
-              <div className="sm:col-span-1 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => removeExpenseRow(idx)}
-                  className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+              {/* Amount (₹) + Delete */}
+              <div className="sm:col-span-2">
+                <div className="flex items-center justify-between gap-1.5">
+                  <label className="text-[10px] font-extrabold text-rose-300 uppercase tracking-wider block sm:hidden">
+                    Total Amount (₹)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => removeExpenseRow(idx)}
+                    className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-all cursor-pointer sm:hidden"
+                    title="Remove item"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-rose-400 pointer-events-none">₹</span>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="0.00"
+                      value={item.amount}
+                      onChange={(e) => handleExpenseChange(idx, 'amount', e.target.value)}
+                      className="w-full bg-[#180d19] border border-rose-500/50 hover:border-rose-400 focus:border-rose-400 rounded-xl pl-6 pr-3 py-2.5 text-sm font-black text-rose-100 placeholder:text-rose-900/50 focus:outline-none focus:ring-1 focus:ring-rose-400/50 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none shadow-inner"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeExpenseRow(idx)}
+                    className="hidden sm:flex p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/15 rounded-xl transition-all cursor-pointer shrink-0 border border-transparent hover:border-rose-500/20"
+                    title="Remove row"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           ))}
         </div>
+
+        {/* Expenses Summary Footer */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-amber-500/20 px-2 bg-[#070b14]/50 rounded-2xl p-3">
+          <span className="text-xs font-bold text-slate-400">
+            Active Expense Items: <strong className="text-white font-black">{expenses.filter(e => parseFloat(e.amount) > 0).length}</strong>
+          </span>
+          <div className="flex items-center gap-2.5">
+            <span className="text-xs font-extrabold uppercase text-rose-400 tracking-wider">Total Route Expenses:</span>
+            <span className="text-base sm:text-lg font-black text-rose-200 bg-rose-500/20 px-3.5 py-1 rounded-xl border border-rose-500/30">
+              ₹{expenses.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0).toLocaleString('en-IN')}
+            </span>
+          </div>
+        </div>
       </div>
 
-      {/* 4. Weight Slip Upload (Cloudinary Cloud Storage) */}
-      <div className="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-6 space-y-4">
-        <h2 className="text-base font-bold text-white flex items-center gap-2">
-          <span className="w-6 h-6 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center text-xs">4</span>
-          Weight Slip & Documents (Cloudinary Upload)
+
+      {/* 4. Weight Slip Upload */}
+      <div className="bg-[#0c1220]/90 backdrop-blur-xl border border-amber-500/20 rounded-3xl p-5 sm:p-7 space-y-4 shadow-xl">
+        <h2 className="text-sm sm:text-base font-extrabold text-white flex items-center gap-2.5">
+          <span className="w-7 h-7 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center text-xs font-black shadow-md shadow-amber-500/30">4</span>
+          <span>Weight Slip & Digital Documents</span>
         </h2>
 
-        <div className="border-2 border-dashed border-slate-800 hover:border-amber-500/50 rounded-2xl p-6 text-center transition-all bg-slate-950/40">
+        <div className="border-2 border-dashed border-amber-500/30 hover:border-amber-400 rounded-3xl p-6 text-center transition-all bg-[#070b14]/50">
           {formData.documentUrl ? (
-            <div className="flex items-center justify-center gap-3 text-sm text-emerald-400 font-semibold">
-              <CheckCircle2 className="w-5 h-5" />
-              <span>Uploaded: {formData.documentName}</span>
-              <a
-                href={formData.documentUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-amber-400 underline ml-2"
-              >
-                View Document
-              </a>
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-center gap-2 text-sm text-emerald-400 font-bold">
+                <CheckCircle2 className="w-5 h-5 shrink-0" />
+                <span>Attached: {formData.documentName || 'Weight Slip'}</span>
+                <a
+                  href={formData.documentUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-amber-400 hover:underline bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20"
+                >
+                  View Slip ↗
+                </a>
+              </div>
+              <div className="flex items-center justify-center gap-2">
+                <label className="inline-block px-4 py-2 bg-[#131c33] hover:bg-slate-800 text-xs font-bold text-amber-300 rounded-xl cursor-pointer transition-all border border-amber-500/30">
+                  {uploadingDoc ? 'Uploading...' : 'Replace Document'}
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={handleRemoveUploadedDoc}
+                  className="px-3.5 py-2 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-xs font-bold rounded-xl border border-rose-500/20 transition-all cursor-pointer"
+                >
+                  Remove Slip
+                </button>
+              </div>
             </div>
           ) : (
             <div>
-              <UploadCloud className="w-8 h-8 mx-auto text-slate-500 mb-2" />
-              <p className="text-sm font-medium text-slate-300">
+              <UploadCloud className="w-10 h-10 mx-auto text-amber-400/80 mb-2" />
+              <p className="text-sm font-bold text-slate-200">
                 Upload Weight Slip / Kanta Pauti Image or PDF
               </p>
-              <p className="text-xs text-slate-500 mt-1">Directly uploaded to Cloudinary</p>
-              <label className="mt-4 inline-block px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white rounded-xl cursor-pointer transition-all border border-slate-700">
-                {uploadingDoc ? 'Uploading to Cloudinary...' : 'Choose File'}
+              <p className="text-xs text-slate-400 mt-1">Securely stored and attached to this trip record</p>
+              <label className="mt-4 inline-block px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-black rounded-xl cursor-pointer transition-all shadow-md shadow-amber-500/20 border border-amber-300/40">
+                {uploadingDoc ? 'Uploading document...' : 'Choose File to Upload'}
                 <input
                   type="file"
                   accept="image/*,application/pdf"
