@@ -10,18 +10,20 @@ import {
   Trash2, 
   Loader2, 
   Users, 
-  X,
-  RefreshCw,
-  Download,
-  Phone,
-  Mail,
-  MapPin,
-  CheckCircle2,
-  FileText,
-  Building2,
-  Sparkles
+  X, 
+  RefreshCw, 
+  Download, 
+  Phone, 
+  Mail, 
+  MapPin, 
+  CheckCircle2, 
+  FileText, 
+  Building2, 
+  Sparkles,
+  FileDown
 } from 'lucide-react';
 import { supabase, getActiveOrgId } from '@/lib/supabase';
+import { generatePartyBillPDF } from '@/lib/feraPdf';
 
 export default function PartiesPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -29,6 +31,7 @@ export default function PartiesPage() {
   const [parties, setParties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [generatingBillPartyId, setGeneratingBillPartyId] = useState(null);
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
@@ -165,6 +168,45 @@ export default function PartiesPage() {
       notes: party.notes || '',
     });
     setShowModal(true);
+  };
+
+  const handleDownloadPartyBill = async (party) => {
+    try {
+      setGeneratingBillPartyId(party.id);
+      const orgId = await getActiveOrgId();
+      if (!orgId) return;
+
+      const { data: partyFeras, error } = await supabase
+        .from('feras')
+        .select(`
+          *,
+          from_location:locations!feras_from_location_id_fkey(id, name, city),
+          to_location:locations!feras_to_location_id_fkey(id, name, city),
+          trucks(id, truck_number, truck_type),
+          materials(id, name, unit)
+        `)
+        .eq('organization_id', orgId)
+        .eq('party_id', party.id)
+        .order('fera_date', { ascending: false });
+
+      if (error) throw error;
+
+      if (!partyFeras || partyFeras.length === 0) {
+        alert(`No trip records found for ${party.name}.`);
+        return;
+      }
+
+      await generatePartyBillPDF({
+        party,
+        feras: partyFeras,
+        asOfDate: new Date(),
+      });
+    } catch (err) {
+      console.error('Error generating party bill:', err);
+      alert('Error generating PDF bill: ' + err.message);
+    } finally {
+      setGeneratingBillPartyId(null);
+    }
   };
 
   const handleExportCSV = () => {
@@ -442,6 +484,19 @@ export default function PartiesPage() {
 
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-amber-500/10">
                   <button
+                    onClick={() => handleDownloadPartyBill(party)}
+                    disabled={generatingBillPartyId === party.id}
+                    className="px-2.5 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                    title="Download Party Bill / Statement (PDF)"
+                  >
+                    {generatingBillPartyId === party.id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                    ) : (
+                      <FileDown className="w-3.5 h-3.5 text-emerald-400 stroke-[2.5]" />
+                    )}
+                    <span>Bill PDF</span>
+                  </button>
+                  <button
                     onClick={() => openEdit(party)}
                     className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 rounded-xl text-xs font-bold flex items-center gap-1 transition cursor-pointer"
                   >
@@ -514,6 +569,18 @@ export default function PartiesPage() {
                       </td>
                       <td className="py-4 px-4 text-center">
                         <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => handleDownloadPartyBill(party)}
+                            disabled={generatingBillPartyId === party.id}
+                            className="p-2 text-emerald-400 hover:text-white hover:bg-emerald-500/20 border border-emerald-500/20 hover:border-emerald-500/40 rounded-xl transition-all cursor-pointer"
+                            title="Download Party Bill / Statement (PDF)"
+                          >
+                            {generatingBillPartyId === party.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                            ) : (
+                              <FileDown className="w-4 h-4 stroke-[2.5]" />
+                            )}
+                          </button>
                           <button
                             onClick={() => openEdit(party)}
                             className="p-2 text-amber-400 hover:text-white hover:bg-amber-500/20 rounded-xl transition-all cursor-pointer"

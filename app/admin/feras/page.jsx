@@ -25,9 +25,14 @@ import {
   User,
   ShieldCheck,
   TrendingUp,
-  Receipt
+  Receipt,
+  FileDown,
+  Printer,
+  CheckSquare,
+  Square
 } from 'lucide-react';
-import { supabase, getActiveOrgId, uploadFileToCloudinary, deleteFileFromStorage } from '@/lib/supabase';
+import { supabase, getActiveOrgId, getNextFeraNumber, uploadFileToCloudinary, deleteFileFromStorage } from '@/lib/supabase';
+import { generateSingleFeraPDF, generateFilteredFerasPDF, generateMultiFeraVouchersPDF, generatePartyBillPDF } from '@/lib/feraPdf';
 
 const initialExpenses = [
   { expenseType: 'diesel', description: 'Diesel Filling', amount: '', quantity: '', rate: '', unit: 'litres' },
@@ -45,6 +50,9 @@ export default function FerasPage() {
   const [saving, setSaving] = useState(false);
   const [uploadingDoc, setUploadingDoc] = useState(false);
 
+  // Row Multi-selection
+  const [selectedFeraIds, setSelectedFeraIds] = useState([]);
+
   // Masters
   const [parties, setParties] = useState([]);
   const [trucks, setTrucks] = useState([]);
@@ -57,7 +65,7 @@ export default function FerasPage() {
   const [editingFera, setEditingFera] = useState(null);
 
   const initialFormState = {
-    feraNumber: `FERA-${Math.floor(100000 + Math.random() * 900000)}`,
+    feraNumber: 'FR-000001',
     feraDate: new Date().toISOString().split('T')[0],
     partyId: '',
     truckId: '',
@@ -65,6 +73,7 @@ export default function FerasPage() {
     materialId: '',
     fromLocationId: '',
     toLocationId: '',
+    rateUnit: '',
     agreedAmount: '',
     weight: '',
     weightUnit: 'ton',
@@ -90,7 +99,7 @@ export default function FerasPage() {
           .from('feras')
           .select(`
             *,
-            parties(id, name),
+            parties(id, name, phone, email, address, gst_number, contact_person),
             trucks(id, truck_number, truck_type),
             drivers(id, name, commission_value),
             materials(id, name, unit),
@@ -101,7 +110,7 @@ export default function FerasPage() {
           `)
           .eq('organization_id', orgId)
           .order('fera_date', { ascending: false }),
-        supabase.from('parties').select('id, name').eq('organization_id', orgId),
+        supabase.from('parties').select('*').eq('organization_id', orgId),
         supabase.from('trucks').select('id, truck_number, truck_type').eq('organization_id', orgId).eq('status', 'active'),
         supabase.from('drivers').select('id, name, commission_value').eq('organization_id', orgId).eq('status', 'active'),
         supabase.from('materials').select('id, name, unit').eq('organization_id', orgId),
@@ -126,21 +135,38 @@ export default function FerasPage() {
   }, []);
 
   // --- ACTIONS ---
-  const handleAddNewClick = () => {
+  const handleAddNewClick = async () => {
     setEditingFera(null);
+    let nextNum = 'FR-000001';
+    try {
+      nextNum = await getNextFeraNumber();
+    } catch (e) {
+      console.warn('Next Fera number error:', e);
+    }
+
+    const defaultDriver = drivers[0];
+    const defaultComm = defaultDriver?.commission_value || 0;
+
     setFormData({
       ...initialFormState,
-      feraNumber: `FERA-${Math.floor(100000 + Math.random() * 900000)}`,
+      feraNumber: nextNum,
       feraDate: new Date().toISOString().split('T')[0],
       partyId: parties[0]?.id || '',
       truckId: trucks[0]?.id || '',
-      driverId: drivers[0]?.id || '',
+      driverId: defaultDriver?.id || '',
       materialId: materials[0]?.id || '',
       fromLocationId: locations[0]?.id || '',
       toLocationId: locations[1]?.id || locations[0]?.id || '',
-      driverCommission: drivers[0]?.commission_value || 0,
+      driverCommission: defaultComm,
     });
-    setExpenses(initialExpenses);
+
+    setExpenses(
+      initialExpenses.map((exp) =>
+        exp.expenseType === 'driver_commission' && defaultComm > 0
+          ? { ...exp, amount: String(defaultComm) }
+          : exp
+      )
+    );
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -148,6 +174,9 @@ export default function FerasPage() {
   const handleEditClick = (item) => {
     setEditingFera(item);
     const primaryDoc = item.fera_documents?.[0];
+    const itemWeight = parseFloat(item.weight) || 0;
+    const itemAgreed = parseFloat(item.agreed_amount) || 0;
+    const calcRateUnit = item.rate_unit || (itemWeight > 0 && itemAgreed > 0 ? (Math.round((itemAgreed / itemWeight) * 100) / 100) : '');
 
     setFormData({
       feraNumber: item.fera_number || '',
@@ -158,10 +187,11 @@ export default function FerasPage() {
       materialId: item.material_id || '',
       fromLocationId: item.from_location_id || '',
       toLocationId: item.to_location_id || '',
+      rateUnit: calcRateUnit ? String(calcRateUnit) : '',
       agreedAmount: item.agreed_amount || '',
       weight: item.weight || '',
       weightUnit: item.weight_unit || 'ton',
-      driverCommission: item.driver_commission || 0,
+      driverCommission: 0,
       status: item.status || 'in_progress',
       notes: item.notes || '',
       documentUrl: primaryDoc?.file_url || '',
@@ -210,6 +240,7 @@ export default function FerasPage() {
       }
 
       setFeras((prev) => prev.filter((f) => f.id !== id));
+      setSelectedFeraIds((prev) => prev.filter((item) => item !== id));
     } catch (err) {
       alert('Error deleting trip: ' + err.message);
     } finally {
@@ -340,10 +371,10 @@ export default function FerasPage() {
         material_id: formData.materialId,
         from_location_id: formData.fromLocationId,
         to_location_id: formData.toLocationId,
+        rate_unit: parseFloat(formData.rateUnit) || null,
         agreed_amount: totalAgreed,
         weight: parseFloat(formData.weight) || 0,
         weight_unit: formData.weightUnit,
-        driver_commission: parseFloat(formData.driverCommission) || 0,
         status: formData.status,
         notes: formData.notes,
       };
@@ -474,6 +505,93 @@ export default function FerasPage() {
     return matchesSearch && matchesStatus;
   });
 
+  // Selection Logic
+  const toggleSelectFera = (id) => {
+    setSelectedFeraIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedFeraIds.length === filteredFeras.length && filteredFeras.length > 0) {
+      setSelectedFeraIds([]);
+    } else {
+      setSelectedFeraIds(filteredFeras.map((f) => f.id));
+    }
+  };
+
+  const isAllSelected = filteredFeras.length > 0 && selectedFeraIds.length === filteredFeras.length;
+  const selectedFerasList = feras.filter((f) => selectedFeraIds.includes(f.id));
+
+  // --- PDF HANDLERS ---
+  const handleDownloadFilteredPDF = () => {
+    if (filteredFeras.length === 0) {
+      alert('No trips match current filters to export to PDF.');
+      return;
+    }
+    generateFilteredFerasPDF(filteredFeras, {
+      status: statusFilter,
+      searchTerm: searchTerm.trim(),
+    });
+  };
+
+  const handleDownloadSelectedStatementPDF = () => {
+    if (selectedFerasList.length === 0) {
+      alert('Please select at least one trip to download PDF.');
+      return;
+    }
+    generateFilteredFerasPDF(
+      selectedFerasList,
+      { status: `${selectedFerasList.length} Trips Selected`, searchTerm: '' },
+      'VEDA TRANSPORT',
+      'SELECTED TRIPS STATEMENT'
+    );
+  };
+
+  const handleDownloadSelectedVouchersPDF = () => {
+    if (selectedFerasList.length === 0) {
+      alert('Please select at least one trip to download vouchers.');
+      return;
+    }
+    generateMultiFeraVouchersPDF(selectedFerasList);
+  };
+
+  const handleDownloadPartyBillForSelected = async () => {
+    if (selectedFerasList.length === 0) {
+      alert('Please select at least one trip to generate party bill.');
+      return;
+    }
+
+    const firstFera = selectedFerasList[0];
+    const targetPartyId = firstFera?.party_id;
+
+    // Fetch complete party record from database
+    let fullParty = parties.find((p) => p.id === targetPartyId);
+    if ((!fullParty || !fullParty.address) && targetPartyId) {
+      const { data: pData } = await supabase.from('parties').select('*').eq('id', targetPartyId).single();
+      if (pData) fullParty = pData;
+    }
+
+    if (!fullParty && firstFera?.parties) {
+      fullParty = firstFera.parties;
+    }
+
+    if (!fullParty) {
+      fullParty = {
+        name: firstFera?.parties?.name || 'Party Client',
+        phone: '',
+        address: '',
+        gst_number: '',
+      };
+    }
+
+    await generatePartyBillPDF({
+      party: fullParty,
+      feras: selectedFerasList,
+      asOfDate: new Date(),
+    });
+  };
+
   return (
     <div className="space-y-6 pb-12">
       {/* ----------------- FORM VIEW (ADD OR EDIT) ----------------- */}
@@ -502,7 +620,18 @@ export default function FerasPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2.5 self-end sm:self-auto">
+            <div className="flex flex-wrap items-center gap-2.5 self-end sm:self-auto">
+              {editingFera && (
+                <button
+                  type="button"
+                  onClick={() => generateSingleFeraPDF(editingFera)}
+                  className="flex items-center gap-1.5 px-3.5 py-2.5 bg-[#131c33] border border-amber-500/40 hover:bg-amber-500/10 text-amber-300 font-bold rounded-xl text-xs sm:text-sm transition-all cursor-pointer shadow-sm"
+                  title="Download Trip Slip PDF"
+                >
+                  <FileDown className="w-4 h-4 text-amber-400 stroke-[2.5]" />
+                  <span>PDF Slip</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={cancelForm}
@@ -625,11 +754,21 @@ export default function FerasPage() {
                   value={formData.driverId}
                   onChange={(e) => {
                     const sel = drivers.find((d) => d.id === e.target.value);
+                    const commVal = sel ? sel.commission_value : 0;
                     setFormData({ 
                       ...formData, 
                       driverId: e.target.value,
-                      driverCommission: sel ? sel.commission_value : formData.driverCommission
+                      driverCommission: commVal
                     });
+                    if (commVal > 0) {
+                      setExpenses((prev) =>
+                        prev.map((exp) =>
+                          exp.expenseType === 'driver_commission' && (!exp.amount || parseFloat(exp.amount) === 0)
+                            ? { ...exp, amount: String(commVal) }
+                            : exp
+                        )
+                      );
+                    }
                   }}
                   className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:border-amber-400 focus:outline-none"
                 >
@@ -703,30 +842,58 @@ export default function FerasPage() {
                   required
                   placeholder="e.g. 25.5"
                   value={formData.weight}
-                  onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
+                  onChange={(e) => {
+                    const wVal = e.target.value;
+                    const w = parseFloat(wVal) || 0;
+                    const r = parseFloat(formData.rateUnit) || 0;
+                    const computedAgreed = (w > 0 && r > 0) ? (Math.round(w * r * 100) / 100).toString() : formData.agreedAmount;
+                    setFormData({ ...formData, weight: wVal, agreedAmount: computedAgreed });
+                  }}
                   className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:border-amber-400 focus:outline-none"
                 />
               </div>
 
               <div className="sm:col-span-2">
-                <label className="text-xs font-black text-amber-400 mb-1.5 block">Party Agreed Billing (₹ Revenue) *</label>
+                <label className="text-xs font-bold text-amber-300 mb-1.5 block">Rate per Unit (₹ / Ton)</label>
                 <input
                   type="number"
+                  step="0.01"
+                  placeholder="e.g. 430"
+                  value={formData.rateUnit}
+                  onChange={(e) => {
+                    const rVal = e.target.value;
+                    const r = parseFloat(rVal) || 0;
+                    const w = parseFloat(formData.weight) || 0;
+                    const computedAgreed = (w > 0 && r > 0) ? (Math.round(w * r * 100) / 100).toString() : formData.agreedAmount;
+                    setFormData({ ...formData, rateUnit: rVal, agreedAmount: computedAgreed });
+                  }}
+                  className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-black text-amber-400 block">Party Agreed Billing (₹ Revenue) *</label>
+                  {formData.rateUnit && formData.weight ? (
+                    <span className="text-[10px] text-emerald-400 font-mono font-bold">
+                      {formData.rateUnit} × {formData.weight}
+                    </span>
+                  ) : null}
+                </div>
+                <input
+                  type="number"
+                  step="0.01"
                   required
                   placeholder="e.g. 50000"
                   value={formData.agreedAmount}
-                  onChange={(e) => setFormData({ ...formData, agreedAmount: e.target.value })}
+                  onChange={(e) => {
+                    const aVal = e.target.value;
+                    const a = parseFloat(aVal) || 0;
+                    const w = parseFloat(formData.weight) || 0;
+                    const computedRate = (a > 0 && w > 0) ? (Math.round((a / w) * 100) / 100).toString() : formData.rateUnit;
+                    setFormData({ ...formData, agreedAmount: aVal, rateUnit: computedRate });
+                  }}
                   className="w-full bg-[#070b14] border border-amber-400 rounded-xl px-4 py-2.5 text-base font-black text-white focus:ring-2 focus:ring-amber-400/50 focus:outline-none shadow-inner"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="text-xs font-bold text-amber-300 mb-1.5 block">Driver Commission (₹)</label>
-                <input
-                  type="number"
-                  value={formData.driverCommission}
-                  onChange={(e) => setFormData({ ...formData, driverCommission: e.target.value })}
-                  className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:border-amber-400 focus:outline-none"
                 />
               </div>
 
@@ -903,7 +1070,6 @@ export default function FerasPage() {
             </div>
           </div>
 
-
           {/* 4. Weight Slip Upload */}
           <div className="bg-[#0c1220]/90 backdrop-blur-xl border border-amber-500/20 rounded-3xl p-5 sm:p-7 space-y-4 shadow-xl">
             <h2 className="text-sm sm:text-base font-extrabold text-white flex items-center gap-2.5">
@@ -991,6 +1157,16 @@ export default function FerasPage() {
                 title="Refresh Data"
               >
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+
+              {/* PDF Report (Filtered) */}
+              <button
+                onClick={handleDownloadFilteredPDF}
+                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-black transition shadow-md shadow-amber-500/20 flex items-center gap-1.5 cursor-pointer border border-amber-300/40"
+                title="Download Filtered Trips PDF Report"
+              >
+                <FileDown className="w-4 h-4 stroke-[2.5]" />
+                <span>PDF Report</span>
               </button>
 
               <button
@@ -1123,6 +1299,60 @@ export default function FerasPage() {
             </div>
           </div>
 
+          {/* Floating / Sticky Selected Feras Action Toolbar */}
+          {selectedFeraIds.length > 0 && (
+            <div className="sticky top-20 z-30 p-3.5 sm:p-4 bg-[#0c1220]/95 backdrop-blur-xl border-2 border-amber-500/50 rounded-2xl shadow-2xl flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center gap-2.5">
+                <span className="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 font-black flex items-center justify-center text-xs shadow-md shadow-amber-500/30">
+                  {selectedFeraIds.length}
+                </span>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-black text-white">
+                    {selectedFeraIds.length} {selectedFeraIds.length === 1 ? 'Trip' : 'Trips'} Selected
+                  </h4>
+                  <p className="text-[11px] text-slate-400">Generate report statement or download individual/batch trip slips</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={handleDownloadPartyBillForSelected}
+                  className="px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer border border-emerald-300/40"
+                  title="Download Official Party Dispatch Bill / Statement (PDF)"
+                >
+                  <Receipt className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <span>Party Bill PDF</span>
+                </button>
+
+                <button
+                  onClick={handleDownloadSelectedStatementPDF}
+                  className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer border border-amber-300/40"
+                  title="Download Summary Statement Table for Selected Trips"
+                >
+                  <FileText className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <span>Selected Statement PDF</span>
+                </button>
+
+                <button
+                  onClick={handleDownloadSelectedVouchersPDF}
+                  className="px-3.5 py-2 bg-[#131c33] hover:bg-[#1a2542] border border-amber-500/40 text-amber-300 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  title="Download Multi-page Slips (1 page per selected trip)"
+                >
+                  <FileDown className="w-3.5 h-3.5 text-amber-400 stroke-[2.5]" />
+                  <span>Selected Slips PDF ({selectedFeraIds.length})</span>
+                </button>
+
+                <button
+                  onClick={() => setSelectedFeraIds([])}
+                  className="p-2 text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-800 text-xs rounded-xl transition-all cursor-pointer border border-slate-700"
+                  title="Clear Selection"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Content Loading & Empty States */}
           {loading ? (
             <div className="p-16 text-center text-slate-400 flex flex-col items-center gap-3 bg-[#0c1220]/60 rounded-3xl border border-amber-500/20">
@@ -1154,21 +1384,33 @@ export default function FerasPage() {
                   const exp = (item.fera_expenses || []).reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
                   const profit = rev - exp;
                   const doc = item.fera_documents?.[0];
+                  const isSelected = selectedFeraIds.includes(item.id);
 
                   return (
                     <div 
                       key={item.id}
-                      className="p-4 bg-[#0c1220]/95 backdrop-blur-md border border-amber-500/20 rounded-2xl shadow-xl space-y-3"
+                      className={`p-4 bg-[#0c1220]/95 backdrop-blur-md rounded-2xl shadow-xl space-y-3 transition-all ${
+                        isSelected ? 'border-2 border-amber-400 ring-1 ring-amber-400/50 bg-[#131c33]/90' : 'border border-amber-500/20'
+                      }`}
                     >
-                      {/* Top Row: Fera Number & Status */}
+                      {/* Top Row: Select Checkbox, Fera Number & Status */}
                       <div className="flex items-center justify-between border-b border-amber-500/15 pb-2.5">
-                        <div>
-                          <span className="text-sm font-black text-white font-mono block">{item.fera_number}</span>
-                          <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
-                            <Calendar className="w-3 h-3 text-amber-400" />
-                            <span>{item.fera_date}</span>
-                          </span>
+                        <div className="flex items-center gap-2.5">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectFera(item.id)}
+                            className="w-4 h-4 rounded border-amber-500/30 bg-[#070b14] text-amber-500 focus:ring-amber-400 cursor-pointer accent-amber-500 shrink-0"
+                          />
+                          <div>
+                            <span className="text-sm font-black text-white font-mono block">{item.fera_number}</span>
+                            <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                              <Calendar className="w-3 h-3 text-amber-400" />
+                              <span>{item.fera_date}</span>
+                            </span>
+                          </div>
                         </div>
+
                         <div className="flex items-center gap-2">
                           {doc && (
                             <a
@@ -1237,13 +1479,24 @@ export default function FerasPage() {
                         </select>
 
                         <div className="flex items-center gap-1.5">
+                          {/* Single Fera PDF Slip */}
+                          <button
+                            onClick={() => generateSingleFeraPDF(item)}
+                            className="px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 rounded-xl text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                            title="Download PDF Slip"
+                          >
+                            <FileDown className="w-3.5 h-3.5 text-amber-400 stroke-[2.5]" />
+                            <span>PDF</span>
+                          </button>
+
                           <button
                             onClick={() => handleEditClick(item)}
-                            className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 rounded-xl text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                            className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1 transition cursor-pointer"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                             <span>Edit</span>
                           </button>
+
                           <button
                             onClick={() => handleDelete(item.id, item.fera_number)}
                             className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 rounded-xl transition cursor-pointer"
@@ -1264,6 +1517,15 @@ export default function FerasPage() {
                   <table className="w-full text-left text-sm text-slate-300">
                     <thead className="bg-[#070b14]/90 text-[11px] uppercase font-black text-amber-400 tracking-wider border-b border-amber-500/20">
                       <tr>
+                        <th className="py-4 px-3 text-center w-10">
+                          <input
+                            type="checkbox"
+                            checked={isAllSelected}
+                            onChange={toggleSelectAll}
+                            className="w-4 h-4 rounded border-amber-500/30 bg-[#070b14] text-amber-500 focus:ring-amber-400 cursor-pointer accent-amber-500"
+                            title="Select All Filtered Trips"
+                          />
+                        </th>
                         <th className="py-4 px-4">Fera Details</th>
                         <th className="py-4 px-4">Party & Route</th>
                         <th className="py-4 px-4">Truck & Driver</th>
@@ -1280,9 +1542,23 @@ export default function FerasPage() {
                         const totalExp = (item.fera_expenses || []).reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
                         const profit = revenue - totalExp;
                         const doc = item.fera_documents?.[0];
+                        const isSelected = selectedFeraIds.includes(item.id);
 
                         return (
-                          <tr key={item.id} className="hover:bg-[#131c33]/60 transition-colors">
+                          <tr 
+                            key={item.id} 
+                            className={`transition-colors ${
+                              isSelected ? 'bg-amber-500/10 hover:bg-amber-500/15' : 'hover:bg-[#131c33]/60'
+                            }`}
+                          >
+                            <td className="py-4 px-3 text-center">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleSelectFera(item.id)}
+                                className="w-4 h-4 rounded border-amber-500/30 bg-[#070b14] text-amber-500 focus:ring-amber-400 cursor-pointer accent-amber-500"
+                              />
+                            </td>
                             <td className="py-4 px-4">
                               <span className="font-extrabold text-white block">{item.fera_number}</span>
                               <span className="text-xs text-slate-400">{item.fera_date}</span>
@@ -1334,9 +1610,18 @@ export default function FerasPage() {
                             </td>
                             <td className="py-4 px-4 text-center">
                               <div className="flex items-center justify-center gap-1.5">
+                                {/* Single Fera PDF Slip */}
+                                <button
+                                  onClick={() => generateSingleFeraPDF(item)}
+                                  className="p-2 text-amber-400 hover:text-white hover:bg-amber-500/20 border border-amber-500/20 hover:border-amber-500/40 rounded-xl transition-all cursor-pointer"
+                                  title="Download Fera Trip Slip (PDF)"
+                                >
+                                  <FileDown className="w-4 h-4 stroke-[2.5]" />
+                                </button>
+
                                 <button
                                   onClick={() => handleEditClick(item)}
-                                  className="p-2 text-amber-400 hover:text-white hover:bg-amber-500/20 border border-transparent hover:border-amber-500/30 rounded-xl transition-all cursor-pointer"
+                                  className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 border border-transparent hover:border-slate-700 rounded-xl transition-all cursor-pointer"
                                   title="Edit Fera"
                                 >
                                   <Edit3 className="w-4 h-4" />

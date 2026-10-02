@@ -13,10 +13,11 @@ import {
   LayoutDashboard, 
   LogOut, 
   Menu, 
-  X,
-  PlusCircle,
-  ShieldCheck,
-  Sparkles
+  X, 
+  PlusCircle, 
+  ShieldCheck, 
+  Sparkles,
+  Building2
 } from 'lucide-react';
 
 export default function AdminLayout({ children }) {
@@ -40,6 +41,7 @@ export default function AdminLayout({ children }) {
     { label: 'Drivers & Payroll', href: '/admin/drivers', icon: Users },
     { label: 'Materials Master', href: '/admin/materials', icon: Package },
     { label: 'Locations Master', href: '/admin/locations', icon: MapPin },
+    { label: 'Company Profile', href: '/admin/settings', icon: Building2 },
   ];
 
   return (

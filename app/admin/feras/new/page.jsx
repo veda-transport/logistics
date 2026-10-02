@@ -16,7 +16,7 @@ import {
   Calendar,
   Truck
 } from 'lucide-react';
-import { supabase, getActiveOrgId, uploadFileToCloudinary, deleteFileFromStorage } from '@/lib/supabase';
+import { supabase, getActiveOrgId, getNextFeraNumber, uploadFileToCloudinary, deleteFileFromStorage } from '@/lib/supabase';
 
 export default function NewFeraPage() {
   const router = useRouter();
@@ -33,7 +33,7 @@ export default function NewFeraPage() {
 
   // Form State
   const [formData, setFormData] = useState({
-    feraNumber: `FERA-${Math.floor(100000 + Math.random() * 900000)}`,
+    feraNumber: 'FR-000001',
     feraDate: new Date().toISOString().split('T')[0],
     partyId: '',
     truckId: '',
@@ -41,6 +41,7 @@ export default function NewFeraPage() {
     materialId: '',
     fromLocationId: '',
     toLocationId: '',
+    rateUnit: '',
     agreedAmount: '',
     weight: '',
     weightUnit: 'ton',
@@ -90,16 +91,35 @@ export default function NewFeraPage() {
         setMaterials(mList);
         setLocations(lList);
 
+        let nextNum = 'FR-000001';
+        try {
+          nextNum = await getNextFeraNumber(orgId);
+        } catch (e) {
+          console.warn('Next Fera number error:', e);
+        }
+
+        const defaultDriver = dList[0];
+        const defaultComm = defaultDriver?.commission_value || 0;
+
         setFormData((prev) => ({
           ...prev,
+          feraNumber: nextNum,
           partyId: pList[0]?.id || '',
           truckId: tList[0]?.id || '',
-          driverId: dList[0]?.id || '',
+          driverId: defaultDriver?.id || '',
           materialId: mList[0]?.id || '',
           fromLocationId: lList[0]?.id || '',
           toLocationId: lList[1]?.id || lList[0]?.id || '',
-          driverCommission: dList[0]?.commission_value || 0,
+          driverCommission: defaultComm,
         }));
+
+        if (defaultComm > 0) {
+          setExpenses((prev) =>
+            prev.map((exp) =>
+              exp.expenseType === 'driver_commission' ? { ...exp, amount: String(defaultComm) } : exp
+            )
+          );
+        }
       } catch (err) {
         console.error('Error loading dropdown masters:', err);
       } finally {
@@ -206,10 +226,10 @@ export default function NewFeraPage() {
             material_id: formData.materialId,
             from_location_id: formData.fromLocationId,
             to_location_id: formData.toLocationId,
+            rate_unit: parseFloat(formData.rateUnit) || null,
             agreed_amount: totalAgreed,
             weight: parseFloat(formData.weight) || 0,
             weight_unit: formData.weightUnit,
-            driver_commission: parseFloat(formData.driverCommission) || 0,
             status: formData.status,
             notes: formData.notes,
           },
@@ -411,11 +431,21 @@ export default function NewFeraPage() {
               value={formData.driverId}
               onChange={(e) => {
                 const sel = drivers.find((d) => d.id === e.target.value);
+                const commVal = sel ? sel.commission_value : 0;
                 setFormData({ 
                   ...formData, 
                   driverId: e.target.value,
-                  driverCommission: sel ? sel.commission_value : 0
+                  driverCommission: commVal
                 });
+                if (commVal > 0) {
+                  setExpenses((prev) =>
+                    prev.map((exp) =>
+                      exp.expenseType === 'driver_commission' && (!exp.amount || parseFloat(exp.amount) === 0)
+                        ? { ...exp, amount: String(commVal) }
+                        : exp
+                    )
+                  );
+                }
               }}
               className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:border-amber-400 focus:outline-none"
             >
@@ -485,30 +515,58 @@ export default function NewFeraPage() {
               required
               placeholder="e.g. 25.5"
               value={formData.weight}
-              onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
+              onChange={(e) => {
+                const wVal = e.target.value;
+                const w = parseFloat(wVal) || 0;
+                const r = parseFloat(formData.rateUnit) || 0;
+                const computedAgreed = (w > 0 && r > 0) ? (Math.round(w * r * 100) / 100).toString() : formData.agreedAmount;
+                setFormData({ ...formData, weight: wVal, agreedAmount: computedAgreed });
+              }}
               className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:border-amber-400 focus:outline-none"
             />
           </div>
 
           <div className="sm:col-span-2">
-            <label className="text-xs font-black text-amber-400 mb-1.5 block">Party Agreed Billing (₹ Revenue) *</label>
+            <label className="text-xs font-bold text-amber-300 mb-1.5 block">Rate per Unit (₹ / Ton)</label>
             <input
               type="number"
+              step="0.01"
+              placeholder="e.g. 430"
+              value={formData.rateUnit}
+              onChange={(e) => {
+                const rVal = e.target.value;
+                const r = parseFloat(rVal) || 0;
+                const w = parseFloat(formData.weight) || 0;
+                const computedAgreed = (w > 0 && r > 0) ? (Math.round(w * r * 100) / 100).toString() : formData.agreedAmount;
+                setFormData({ ...formData, rateUnit: rVal, agreedAmount: computedAgreed });
+              }}
+              className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:border-amber-400 focus:outline-none"
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-black text-amber-400 block">Party Agreed Billing (₹ Revenue) *</label>
+              {formData.rateUnit && formData.weight ? (
+                <span className="text-[10px] text-emerald-400 font-mono font-bold">
+                  {formData.rateUnit} × {formData.weight}
+                </span>
+              ) : null}
+            </div>
+            <input
+              type="number"
+              step="0.01"
               required
               placeholder="e.g. 50000"
               value={formData.agreedAmount}
-              onChange={(e) => setFormData({ ...formData, agreedAmount: e.target.value })}
+              onChange={(e) => {
+                const aVal = e.target.value;
+                const a = parseFloat(aVal) || 0;
+                const w = parseFloat(formData.weight) || 0;
+                const computedRate = (a > 0 && w > 0) ? (Math.round((a / w) * 100) / 100).toString() : formData.rateUnit;
+                setFormData({ ...formData, agreedAmount: aVal, rateUnit: computedRate });
+              }}
               className="w-full bg-[#070b14] border border-amber-400 rounded-xl px-4 py-2.5 text-base font-black text-white focus:ring-2 focus:ring-amber-400/50 focus:outline-none shadow-inner"
-            />
-          </div>
-
-          <div className="sm:col-span-2">
-            <label className="text-xs font-bold text-amber-300 mb-1.5 block">Driver Commission (₹)</label>
-            <input
-              type="number"
-              value={formData.driverCommission}
-              onChange={(e) => setFormData({ ...formData, driverCommission: e.target.value })}
-              className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:border-amber-400 focus:outline-none"
             />
           </div>
         </div>
