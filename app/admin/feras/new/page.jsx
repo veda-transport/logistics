@@ -14,9 +14,18 @@ import {
   Sparkles,
   MapPin,
   Calendar,
-  Truck
+  Truck,
+  Boxes,
+  X
 } from 'lucide-react';
-import { supabase, getActiveOrgId, getNextFeraNumber, uploadFileToCloudinary, deleteFileFromStorage } from '@/lib/supabase';
+import { 
+  supabase, 
+  getActiveOrgId, 
+  getNextFeraNumber, 
+  getNextFeraGroupNumber,
+  uploadFileToCloudinary, 
+  deleteFileFromStorage 
+} from '@/lib/supabase';
 
 export default function NewFeraPage() {
   const router = useRouter();
@@ -30,12 +39,20 @@ export default function NewFeraPage() {
   const [drivers, setDrivers] = useState([]);
   const [materials, setMaterials] = useState([]);
   const [locations, setLocations] = useState([]);
+  const [feraGroups, setFeraGroups] = useState([]);
+
+  // Quick Group Creation Modal State
+  const [showQuickGroupModal, setShowQuickGroupModal] = useState(false);
+  const [quickGroupNumber, setQuickGroupNumber] = useState('FG-000001');
+  const [quickGroupName, setQuickGroupName] = useState('');
+  const [quickGroupSaving, setQuickGroupSaving] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
     feraNumber: 'FR-000001',
     feraDate: new Date().toISOString().split('T')[0],
     partyId: '',
+    feraGroupId: '',
     truckId: '',
     driverId: '',
     materialId: '',
@@ -61,7 +78,7 @@ export default function NewFeraPage() {
     { expenseType: 'toll', description: 'Toll Tax', amount: '', quantity: null, rate: null, unit: null },
   ]);
 
-  // Load masters on mount
+  // Load masters on mount & pre-populate URL query params (group_id / party_id)
   useEffect(() => {
     let isMounted = true;
     async function loadMasters() {
@@ -69,12 +86,18 @@ export default function NewFeraPage() {
         const orgId = await getActiveOrgId();
         if (!orgId || !isMounted) return;
 
-        const [pRes, tRes, dRes, mRes, lRes] = await Promise.all([
+        // Check URL params
+        const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+        const initialGroupId = urlParams ? urlParams.get('group_id') : null;
+        const initialPartyId = urlParams ? urlParams.get('party_id') : null;
+
+        const [pRes, tRes, dRes, mRes, lRes, gRes] = await Promise.all([
           supabase.from('parties').select('id, name').eq('organization_id', orgId),
           supabase.from('trucks').select('id, truck_number, truck_type').eq('organization_id', orgId).eq('status', 'active'),
           supabase.from('drivers').select('id, name, commission_value').eq('organization_id', orgId).eq('status', 'active'),
           supabase.from('materials').select('id, name, unit').eq('organization_id', orgId),
           supabase.from('locations').select('id, name, city').eq('organization_id', orgId),
+          supabase.from('fera_groups').select('id, group_number, party_id, name, status').eq('organization_id', orgId).order('created_at', { ascending: false }),
         ]);
 
         if (!isMounted) return;
@@ -84,12 +107,14 @@ export default function NewFeraPage() {
         const dList = dRes.data || [];
         const mList = mRes.data || [];
         const lList = lRes.data || [];
+        const gList = gRes.data || [];
 
         setParties(pList);
         setTrucks(tList);
         setDrivers(dList);
         setMaterials(mList);
         setLocations(lList);
+        setFeraGroups(gList);
 
         let nextNum = 'FR-000001';
         try {
@@ -101,10 +126,22 @@ export default function NewFeraPage() {
         const defaultDriver = dList[0];
         const defaultComm = defaultDriver?.commission_value || 0;
 
+        // Find party from group if group_id is given
+        let selectedPartyId = initialPartyId || pList[0]?.id || '';
+        let selectedGroupId = initialGroupId || '';
+
+        if (initialGroupId && !initialPartyId) {
+          const matchedGrp = gList.find((g) => g.id === initialGroupId);
+          if (matchedGrp?.party_id) {
+            selectedPartyId = matchedGrp.party_id;
+          }
+        }
+
         setFormData((prev) => ({
           ...prev,
           feraNumber: nextNum,
-          partyId: pList[0]?.id || '',
+          partyId: selectedPartyId,
+          feraGroupId: selectedGroupId,
           truckId: tList[0]?.id || '',
           driverId: defaultDriver?.id || '',
           materialId: mList[0]?.id || '',
@@ -132,6 +169,58 @@ export default function NewFeraPage() {
       isMounted = false;
     };
   }, []);
+
+  // Quick Open Group Modal
+  const openQuickCreateGroup = async () => {
+    try {
+      const orgId = await getActiveOrgId();
+      if (orgId) {
+        const nextGroupNum = await getNextFeraGroupNumber(orgId);
+        setQuickGroupNumber(nextGroupNum);
+      }
+    } catch (err) {
+      console.warn('Error getting next group number:', err);
+    }
+    const selectedParty = parties.find((p) => p.id === formData.partyId);
+    setQuickGroupName(selectedParty ? `${selectedParty.name} Requirement` : '');
+    setShowQuickGroupModal(true);
+  };
+
+  // Quick Save Group
+  const handleQuickCreateGroup = async (e) => {
+    e.preventDefault();
+    if (!formData.partyId) {
+      alert('Please select a Party first to create a group for that client.');
+      return;
+    }
+    setQuickGroupSaving(true);
+    try {
+      const orgId = await getActiveOrgId();
+      const { data: newGrp, error } = await supabase
+        .from('fera_groups')
+        .insert([
+          {
+            organization_id: orgId,
+            group_number: quickGroupNumber.trim().toUpperCase(),
+            party_id: formData.partyId,
+            name: quickGroupName.trim() || null,
+            status: 'active',
+          },
+        ])
+        .select('id, group_number, party_id, name, status')
+        .single();
+
+      if (error) throw error;
+
+      setFeraGroups((prev) => [newGrp, ...prev]);
+      setFormData((prev) => ({ ...prev, feraGroupId: newGrp.id }));
+      setShowQuickGroupModal(false);
+    } catch (err) {
+      alert('Error creating group: ' + err.message);
+    } finally {
+      setQuickGroupSaving(false);
+    }
+  };
 
   const handleExpenseChange = (index, field, value) => {
     const updated = [...expenses];
@@ -162,7 +251,6 @@ export default function NewFeraPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // If there was an earlier uploaded file before saving, clean it up
     if (formData.documentUrl) {
       deleteFileFromStorage(formData.documentUrl);
     }
@@ -200,6 +288,9 @@ export default function NewFeraPage() {
   const netProfit = totalAgreed - totalExpenses;
   const marginPercent = totalAgreed > 0 ? ((netProfit / totalAgreed) * 100).toFixed(1) : 0;
 
+  // Filter groups relevant to selected party
+  const partyGroups = feraGroups.filter((g) => !formData.partyId || g.party_id === formData.partyId);
+
   // Submit to Supabase
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -221,6 +312,7 @@ export default function NewFeraPage() {
             fera_number: formData.feraNumber.trim().toUpperCase(),
             fera_date: formData.feraDate,
             party_id: formData.partyId,
+            fera_group_id: formData.feraGroupId || null,
             truck_id: formData.truckId,
             driver_id: formData.driverId,
             material_id: formData.materialId,
@@ -272,7 +364,12 @@ export default function NewFeraPage() {
       }
 
       alert('Trip recorded successfully!');
-      router.push('/admin/feras');
+
+      if (formData.feraGroupId) {
+        router.push(`/admin/fera-groups/detail?id=${formData.feraGroupId}`);
+      } else {
+        router.push('/admin/feras');
+      }
     } catch (err) {
       alert('Error saving trip: ' + err.message);
     } finally {
@@ -305,7 +402,7 @@ export default function NewFeraPage() {
               <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">Create New Fera (Trip)</h1>
               <Sparkles className="w-4 h-4 text-amber-400" />
             </div>
-            <p className="text-xs text-slate-400">Record trip dispatch, assign truck & driver, and log route expenses.</p>
+            <p className="text-xs text-slate-400">Record trip dispatch, assign truck & driver, link to Fera Group, and log route expenses.</p>
           </div>
         </div>
 
@@ -349,11 +446,11 @@ export default function NewFeraPage() {
         </div>
       </div>
 
-      {/* 1. Trip Master Info */}
+      {/* 1. Trip Master Info & Group Assignment */}
       <div className="bg-[#0c1220]/90 backdrop-blur-xl border border-amber-500/20 rounded-3xl p-5 sm:p-7 space-y-5 shadow-xl">
         <h2 className="text-sm sm:text-base font-extrabold text-white flex items-center gap-2.5">
           <span className="w-7 h-7 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center text-xs font-black shadow-md shadow-amber-500/30">1</span>
-          <span>Trip Dispatch Details</span>
+          <span>Trip Dispatch & Group Details</span>
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
@@ -399,11 +496,57 @@ export default function NewFeraPage() {
             <select
               required
               value={formData.partyId}
-              onChange={(e) => setFormData({ ...formData, partyId: e.target.value })}
+              onChange={(e) => {
+                const newPartyId = e.target.value;
+                setFormData({
+                  ...formData,
+                  partyId: newPartyId,
+                  // clear group if selected group is not for this party
+                  feraGroupId: feraGroups.some((g) => g.id === formData.feraGroupId && g.party_id === newPartyId) ? formData.feraGroupId : '',
+                });
+              }}
               className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:border-amber-400 focus:outline-none"
             >
               {parties.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Fera Group (Trip Group / Requirement Batch) */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                <Boxes className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Fera Group (Batch / Order)</span>
+              </label>
+              <button
+                type="button"
+                onClick={openQuickCreateGroup}
+                className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 hover:underline cursor-pointer flex items-center gap-1"
+              >
+                <Plus className="w-3 h-3" />
+                <span>+ New Group</span>
+              </button>
+            </div>
+            <select
+              value={formData.feraGroupId}
+              onChange={(e) => {
+                const selectedGroupId = e.target.value;
+                const groupObj = feraGroups.find((g) => g.id === selectedGroupId);
+                setFormData({
+                  ...formData,
+                  feraGroupId: selectedGroupId,
+                  partyId: groupObj?.party_id || formData.partyId,
+                });
+              }}
+              className="w-full bg-[#070b14] border border-indigo-500/40 rounded-xl px-4 py-2.5 text-sm text-indigo-200 focus:border-indigo-400 focus:outline-none cursor-pointer"
+            >
+              <option value="">-- No Group (Single Fera) --</option>
+              {partyGroups.map((grp) => (
+                <option key={grp.id} value={grp.id}>
+                  {grp.group_number} {grp.name ? `(${grp.name})` : ''} - {grp.status?.toUpperCase()}
+                </option>
               ))}
             </select>
           </div>
@@ -732,7 +875,6 @@ export default function NewFeraPage() {
         </div>
       </div>
 
-
       {/* 4. Weight Slip Upload */}
       <div className="bg-[#0c1220]/90 backdrop-blur-xl border border-amber-500/20 rounded-3xl p-5 sm:p-7 space-y-4 shadow-xl">
         <h2 className="text-sm sm:text-base font-extrabold text-white flex items-center gap-2.5">
@@ -794,6 +936,79 @@ export default function NewFeraPage() {
           )}
         </div>
       </div>
+
+      {/* Quick Group Modal */}
+      {showQuickGroupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="bg-[#0c1220] border border-indigo-500/40 rounded-3xl p-6 sm:p-7 max-w-md w-full space-y-5 shadow-2xl relative">
+            <div className="flex items-center justify-between border-b border-indigo-500/20 pb-3">
+              <div className="flex items-center gap-2">
+                <Boxes className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-base font-black text-white">Create New Fera Group</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowQuickGroupModal(false)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg bg-[#131c33] border border-indigo-500/20"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickCreateGroup} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-indigo-300 block mb-1">Group ID / Number *</label>
+                <input
+                  type="text"
+                  required
+                  value={quickGroupNumber}
+                  onChange={(e) => setQuickGroupNumber(e.target.value.toUpperCase())}
+                  className="w-full bg-[#070b14] border border-indigo-500/30 rounded-xl px-4 py-2 text-sm text-white font-mono uppercase focus:border-indigo-400 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-indigo-300 block mb-1">Party / Client *</label>
+                <input
+                  type="text"
+                  readOnly
+                  value={parties.find((p) => p.id === formData.partyId)?.name || 'Selected Party'}
+                  className="w-full bg-[#070b14]/60 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-300 cursor-not-allowed"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-indigo-300 block mb-1">Group Name / Order Description</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 10 Reti + 10 Kapchi Order"
+                  value={quickGroupName}
+                  onChange={(e) => setQuickGroupName(e.target.value)}
+                  className="w-full bg-[#070b14] border border-indigo-500/30 rounded-xl px-4 py-2 text-sm text-white focus:border-indigo-400 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-indigo-500/20">
+                <button
+                  type="button"
+                  onClick={() => setShowQuickGroupModal(false)}
+                  className="px-4 py-2 bg-[#131c33] border border-slate-700 hover:bg-slate-800 text-slate-300 font-bold rounded-xl text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={quickGroupSaving}
+                  className="flex items-center gap-1.5 px-5 py-2 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-400 hover:to-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/25 text-xs cursor-pointer"
+                >
+                  {quickGroupSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                  <span>Create & Select Group</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </form>
   );
 }

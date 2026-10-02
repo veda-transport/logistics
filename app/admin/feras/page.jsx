@@ -29,9 +29,12 @@ import {
   FileDown,
   Printer,
   CheckSquare,
-  Square
+  Square,
+  Boxes,
+  Filter,
+  RotateCcw
 } from 'lucide-react';
-import { supabase, getActiveOrgId, getNextFeraNumber, uploadFileToCloudinary, deleteFileFromStorage } from '@/lib/supabase';
+import { supabase, getActiveOrgId, getNextFeraNumber, getNextFeraGroupNumber, uploadFileToCloudinary, deleteFileFromStorage } from '@/lib/supabase';
 import { generateSingleFeraPDF, generateFilteredFerasPDF, generateMultiFeraVouchersPDF, generatePartyBillPDF } from '@/lib/feraPdf';
 
 const initialExpenses = [
@@ -45,6 +48,11 @@ const initialExpenses = [
 export default function FerasPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [partyFilter, setPartyFilter] = useState('All');
+  const [groupFilter, setGroupFilter] = useState('All');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [generatingFilteredPartyBill, setGeneratingFilteredPartyBill] = useState(false);
   const [feras, setFeras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -59,6 +67,13 @@ export default function FerasPage() {
   const [drivers, setDrivers] = useState([]);
   const [materials, setMaterials] = useState([]);
   const [locations, setLocations] = useState([]);
+  const [feraGroups, setFeraGroups] = useState([]);
+
+  // Quick Group Modal State
+  const [showQuickGroupModal, setShowQuickGroupModal] = useState(false);
+  const [quickGroupNumber, setQuickGroupNumber] = useState('FG-000001');
+  const [quickGroupName, setQuickGroupName] = useState('');
+  const [quickGroupSaving, setQuickGroupSaving] = useState(false);
 
   // Form State
   const [showForm, setShowForm] = useState(false);
@@ -68,6 +83,7 @@ export default function FerasPage() {
     feraNumber: 'FR-000001',
     feraDate: new Date().toISOString().split('T')[0],
     partyId: '',
+    feraGroupId: '',
     truckId: '',
     driverId: '',
     materialId: '',
@@ -94,7 +110,7 @@ export default function FerasPage() {
       const orgId = await getActiveOrgId();
       if (!orgId) return;
 
-      const [ferasRes, pRes, tRes, dRes, mRes, lRes] = await Promise.all([
+      const [ferasRes, pRes, tRes, dRes, mRes, lRes, gRes] = await Promise.all([
         supabase
           .from('feras')
           .select(`
@@ -105,6 +121,7 @@ export default function FerasPage() {
             materials(id, name, unit),
             from_location:locations!feras_from_location_id_fkey(id, name, city),
             to_location:locations!feras_to_location_id_fkey(id, name, city),
+            fera_groups(id, group_number, name, status),
             fera_expenses(*),
             fera_documents(*)
           `)
@@ -115,6 +132,7 @@ export default function FerasPage() {
         supabase.from('drivers').select('id, name, commission_value').eq('organization_id', orgId).eq('status', 'active'),
         supabase.from('materials').select('id, name, unit').eq('organization_id', orgId),
         supabase.from('locations').select('id, name, city').eq('organization_id', orgId),
+        supabase.from('fera_groups').select('id, group_number, party_id, name, status').eq('organization_id', orgId).order('created_at', { ascending: false }),
       ]);
 
       setFeras(ferasRes.data || []);
@@ -123,6 +141,7 @@ export default function FerasPage() {
       setDrivers(dRes.data || []);
       setMaterials(mRes.data || []);
       setLocations(lRes.data || []);
+      setFeraGroups(gRes.data || []);
     } catch (err) {
       console.error('Error fetching feras data:', err);
     } finally {
@@ -182,6 +201,7 @@ export default function FerasPage() {
       feraNumber: item.fera_number || '',
       feraDate: item.fera_date || '',
       partyId: item.party_id || '',
+      feraGroupId: item.fera_group_id || '',
       truckId: item.truck_id || '',
       driverId: item.driver_id || '',
       materialId: item.material_id || '',
@@ -366,6 +386,7 @@ export default function FerasPage() {
         fera_number: formData.feraNumber.trim().toUpperCase(),
         fera_date: formData.feraDate,
         party_id: formData.partyId,
+        fera_group_id: formData.feraGroupId || null,
         truck_id: formData.truckId,
         driver_id: formData.driverId,
         material_id: formData.materialId,
@@ -484,17 +505,28 @@ export default function FerasPage() {
   }, 0);
   const totalNetProfit = totalRevenue - totalAllExpenses;
 
+  // Available Fera Groups matching currently selected party
+  const availableGroupsForFilter = feraGroups.filter((g) => {
+    if (partyFilter === 'All') return true;
+    return g.party_id === partyFilter;
+  });
+
   // Filtered List
   const filteredFeras = feras.filter((item) => {
     const pName = item.parties?.name || '';
     const tNum = item.trucks?.truck_number || '';
     const dName = item.drivers?.name || '';
     const fNum = item.fera_number || '';
+    const gNum = item.fera_groups?.group_number || '';
+    const gName = item.fera_groups?.name || '';
     const fromCity = item.from_location?.city || item.from_location?.name || '';
     const toCity = item.to_location?.city || item.to_location?.name || '';
 
     const matchesSearch = 
+      !searchTerm.trim() ||
       fNum.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      gNum.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      gName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       pName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       tNum.toLowerCase().includes(searchTerm.toLowerCase()) ||
       dName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -502,8 +534,29 @@ export default function FerasPage() {
       toCity.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesStatus = statusFilter === 'All' || item.status === statusFilter.toLowerCase();
-    return matchesSearch && matchesStatus;
+    const matchesParty = partyFilter === 'All' || item.party_id === partyFilter;
+    const matchesGroup = groupFilter === 'All' 
+      ? true 
+      : groupFilter === 'none' 
+        ? !item.fera_group_id 
+        : item.fera_group_id === groupFilter;
+    const matchesDateFrom = !dateFrom || item.fera_date >= dateFrom;
+    const matchesDateTo = !dateTo || item.fera_date <= dateTo;
+
+    return matchesSearch && matchesStatus && matchesParty && matchesGroup && matchesDateFrom && matchesDateTo;
   });
+
+  const handleResetFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('All');
+    setPartyFilter('All');
+    setGroupFilter('All');
+    setDateFrom('');
+    setDateTo('');
+    setSelectedFeraIds([]);
+  };
+
+  const isFilterActive = searchTerm || statusFilter !== 'All' || partyFilter !== 'All' || groupFilter !== 'All' || dateFrom || dateTo;
 
   // Selection Logic
   const toggleSelectFera = (id) => {
@@ -590,6 +643,64 @@ export default function FerasPage() {
       feras: selectedFerasList,
       asOfDate: new Date(),
     });
+  };
+
+  // Generate Party Bill PDF for currently Filtered Trips (or Selected)
+  const handleDownloadPartyBillForFiltered = async () => {
+    const targetList = selectedFerasList.length > 0 ? selectedFerasList : filteredFeras;
+    if (targetList.length === 0) {
+      alert('No trips match current filters to generate bill.');
+      return;
+    }
+
+    setGeneratingFilteredPartyBill(true);
+    try {
+      let targetPartyId = partyFilter !== 'All' ? partyFilter : null;
+      if (!targetPartyId) {
+        const uniqueParties = Array.from(new Set(targetList.map((f) => f.party_id).filter(Boolean)));
+        if (uniqueParties.length === 1) {
+          targetPartyId = uniqueParties[0];
+        } else if (uniqueParties.length > 1) {
+          alert('Current view contains trips for multiple parties. Please choose a specific Party from the Party filter dropdown to generate their bill.');
+          setGeneratingFilteredPartyBill(false);
+          return;
+        }
+      }
+
+      if (!targetPartyId) {
+        targetPartyId = targetList[0]?.party_id;
+      }
+
+      let fullParty = parties.find((p) => p.id === targetPartyId);
+      if ((!fullParty || !fullParty.address) && targetPartyId) {
+        const { data: pData } = await supabase.from('parties').select('*').eq('id', targetPartyId).single();
+        if (pData) fullParty = pData;
+      }
+
+      if (!fullParty && targetList[0]?.parties) {
+        fullParty = targetList[0].parties;
+      }
+
+      if (!fullParty) {
+        fullParty = {
+          name: targetList[0]?.parties?.name || 'Party Client',
+          phone: '',
+          address: '',
+          gst_number: '',
+        };
+      }
+
+      await generatePartyBillPDF({
+        party: fullParty,
+        feras: targetList,
+        asOfDate: new Date(),
+      });
+    } catch (err) {
+      console.error('Error generating party bill:', err);
+      alert('Error generating PDF bill: ' + err.message);
+    } finally {
+      setGeneratingFilteredPartyBill(false);
+    }
   };
 
   return (
@@ -720,13 +831,54 @@ export default function FerasPage() {
                 <select
                   required
                   value={formData.partyId}
-                  onChange={(e) => setFormData({ ...formData, partyId: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, partyId: e.target.value, feraGroupId: '' })}
                   className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:border-amber-400 focus:outline-none"
                 >
                   <option value="">Select Party</option>
                   {parties.map((p) => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
+                </select>
+              </div>
+
+              {/* Fera Group (Optional Batch) */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-amber-300 block">Fera Group (Batch / Order)</label>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!formData.partyId) {
+                        alert('Please select a party first.');
+                        return;
+                      }
+                      let nextGNum = 'FG-000001';
+                      try {
+                        nextGNum = await getNextFeraGroupNumber();
+                      } catch {}
+                      setQuickGroupNumber(nextGNum);
+                      setQuickGroupName('');
+                      setShowQuickGroupModal(true);
+                    }}
+                    className="text-[11px] font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>New Group</span>
+                  </button>
+                </div>
+                <select
+                  value={formData.feraGroupId}
+                  onChange={(e) => setFormData({ ...formData, feraGroupId: e.target.value })}
+                  className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-4 py-2.5 text-sm text-white focus:border-amber-400 focus:outline-none"
+                >
+                  <option value="">None (Direct Individual Trip)</option>
+                  {feraGroups
+                    .filter((g) => !formData.partyId || g.party_id === formData.partyId)
+                    .map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.group_number} {g.name ? `• ${g.name}` : ''} ({g.status})
+                      </option>
+                    ))}
                 </select>
               </div>
 
@@ -1263,39 +1415,173 @@ export default function FerasPage() {
             </div>
           </div>
 
-          {/* Search and Status Pill Filter Bar */}
-          <div className="flex flex-col sm:flex-row items-center gap-3 bg-[#0c1220]/90 p-3 rounded-2xl border border-amber-500/20 shadow-xl">
-            <div className="relative flex-1 w-full">
-              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-amber-400/80" />
-              <input
-                type="text"
-                placeholder="Search Fera #, Party, Truck, Driver or Route..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-[#070b14] border border-amber-500/25 rounded-xl pl-10 pr-10 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-amber-400"
-              />
-              {searchTerm && (
+          {/* Dynamic Multi-Dimensional Filter Bar */}
+          <div className="bg-[#0c1220]/95 backdrop-blur-xl border border-amber-500/20 rounded-3xl p-4 sm:p-5 shadow-2xl space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-amber-500/10 pb-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Filter className="w-4 h-4 text-amber-400" />
+                <h3 className="text-xs sm:text-sm font-black text-white uppercase tracking-wider">
+                  Filter Trips & Generate Bill
+                </h3>
+                {isFilterActive && (
+                  <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                    Filtered ({filteredFeras.length} of {feras.length})
+                  </span>
+                )}
+              </div>
+
+              {/* Primary Filter-Wise Party Bill Generator Button */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {isFilterActive && (
+                  <button
+                    onClick={handleResetFilters}
+                    className="px-3 py-1.5 rounded-xl bg-[#131c33] hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-bold transition flex items-center gap-1.5 border border-slate-700 cursor-pointer"
+                    title="Reset all filters"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Reset Filters</span>
+                  </button>
+                )}
+
                 <button
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  onClick={handleDownloadPartyBillForFiltered}
+                  disabled={generatingFilteredPartyBill || filteredFeras.length === 0}
+                  className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer border border-emerald-300/40 disabled:opacity-50"
+                  title="Generate Official Party Dispatch Bill for currently filtered trips"
                 >
-                  <X className="w-4 h-4" />
+                  {generatingFilteredPartyBill ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Receipt className="w-4 h-4 stroke-[2.5]" />
+                  )}
+                  <span>Generate Party Bill PDF ({filteredFeras.length})</span>
                 </button>
-              )}
+              </div>
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full sm:w-auto bg-[#070b14] border border-amber-500/25 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-amber-300 font-bold focus:outline-none focus:border-amber-400 cursor-pointer"
-              >
-                <option value="All">All Statuses ({totalCount})</option>
-                <option value="in_progress">In Progress ({inProgressCount})</option>
-                <option value="planned">Planned ({plannedCount})</option>
-                <option value="completed">Completed ({completedCount})</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
+            {/* Filter Controls Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+              {/* 1. Search Box */}
+              <div className="lg:col-span-1">
+                <label className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">
+                  Search Keyword
+                </label>
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-amber-400/80 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Fera #, Truck, Driver..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full bg-[#070b14] border border-amber-500/25 focus:border-amber-400 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none"
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* 2. Client / Party Filter */}
+              <div className="lg:col-span-1">
+                <label className="text-[11px] font-extrabold text-amber-400 uppercase tracking-wider block mb-1">
+                  Client / Party
+                </label>
+                <select
+                  value={partyFilter}
+                  onChange={(e) => {
+                    const newParty = e.target.value;
+                    setPartyFilter(newParty);
+                    if (newParty !== 'All' && groupFilter !== 'All' && groupFilter !== 'none') {
+                      const grp = feraGroups.find((g) => g.id === groupFilter);
+                      if (grp && grp.party_id !== newParty) {
+                        setGroupFilter('All');
+                      }
+                    }
+                  }}
+                  className="w-full bg-[#070b14] border border-amber-500/35 focus:border-amber-400 rounded-xl px-3 py-2 text-xs font-bold text-amber-200 focus:outline-none cursor-pointer"
+                >
+                  <option value="All">All Parties ({parties.length})</option>
+                  {parties.map((p) => {
+                    const tripCount = feras.filter((f) => f.party_id === p.id).length;
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({tripCount} {tripCount === 1 ? 'Trip' : 'Trips'})
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* 3. Fera Group Filter */}
+              <div className="lg:col-span-1">
+                <label className="text-[11px] font-extrabold text-indigo-300 uppercase tracking-wider block mb-1 flex items-center gap-1">
+                  <Boxes className="w-3 h-3 text-indigo-400" />
+                  <span>Fera Group</span>
+                </label>
+                <select
+                  value={groupFilter}
+                  onChange={(e) => setGroupFilter(e.target.value)}
+                  className="w-full bg-[#070b14] border border-indigo-500/35 focus:border-indigo-400 rounded-xl px-3 py-2 text-xs font-bold text-indigo-200 focus:outline-none cursor-pointer"
+                >
+                  <option value="All">All Groups ({availableGroupsForFilter.length})</option>
+                  <option value="none">-- Ungrouped (Single Feras) --</option>
+                  {availableGroupsForFilter.map((g) => {
+                    const grpTrips = feras.filter((f) => f.fera_group_id === g.id).length;
+                    return (
+                      <option key={g.id} value={g.id}>
+                        {g.group_number} {g.name ? `(${g.name})` : ''} - {grpTrips} Trips
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* 4. Status Filter */}
+              <div className="lg:col-span-1">
+                <label className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">
+                  Status
+                </label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full bg-[#070b14] border border-amber-500/25 focus:border-amber-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none cursor-pointer"
+                >
+                  <option value="All">All Statuses ({totalCount})</option>
+                  <option value="in_progress">In Progress ({inProgressCount})</option>
+                  <option value="planned">Planned ({plannedCount})</option>
+                  <option value="completed">Completed ({completedCount})</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+
+              {/* 5. Date Range (From - To) */}
+              <div className="lg:col-span-1">
+                <label className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">
+                  Date Range
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="w-1/2 bg-[#070b14] border border-amber-500/25 focus:border-amber-400 rounded-xl px-2 py-1.5 text-[11px] text-white focus:outline-none"
+                    title="From Date"
+                  />
+                  <span className="text-xs text-slate-500">-</span>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="w-1/2 bg-[#070b14] border border-amber-500/25 focus:border-amber-400 rounded-xl px-2 py-1.5 text-[11px] text-white focus:outline-none"
+                    title="To Date"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1562,17 +1848,29 @@ export default function FerasPage() {
                             <td className="py-4 px-4">
                               <span className="font-extrabold text-white block">{item.fera_number}</span>
                               <span className="text-xs text-slate-400">{item.fera_date}</span>
-                              {doc && (
-                                <a
-                                  href={doc.file_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-1 text-[11px] text-amber-400 hover:underline mt-1 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20"
-                                >
-                                  <FileText className="w-3 h-3" />
-                                  <span>Slip</span>
-                                </a>
-                              )}
+                              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                {item.fera_groups && (
+                                  <Link
+                                    href={`/admin/fera-groups/detail?id=${item.fera_group_id}`}
+                                    className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 px-2 py-0.5 rounded-md border border-amber-500/30 transition-all"
+                                    title={`Group: ${item.fera_groups.group_number}`}
+                                  >
+                                    <Boxes className="w-3 h-3 text-amber-400" />
+                                    <span>{item.fera_groups.group_number}</span>
+                                  </Link>
+                                )}
+                                {doc && (
+                                  <a
+                                    href={doc.file_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 text-[11px] text-amber-400 hover:underline bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20"
+                                  >
+                                    <FileText className="w-3 h-3" />
+                                    <span>Slip</span>
+                                  </a>
+                                )}
+                              </div>
                             </td>
                             <td className="py-4 px-4">
                               <span className="font-bold text-slate-100 block">{item.parties?.name || '-'}</span>
@@ -1646,6 +1944,107 @@ export default function FerasPage() {
           )}
         </>
       )}
+
+      {/* Quick Group Creation Modal */}
+      {showQuickGroupModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+          <div className="bg-[#0c1220] border border-amber-500/30 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between border-b border-amber-500/20 pb-3">
+              <div className="flex items-center gap-2">
+                <Boxes className="w-5 h-5 text-amber-400" />
+                <h3 className="text-base font-black text-white">Create New Fera Group</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowQuickGroupModal(false)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!quickGroupNumber.trim() || !formData.partyId) {
+                  alert('Please provide group number and select party.');
+                  return;
+                }
+
+                setQuickGroupSaving(true);
+                try {
+                  const orgId = await getActiveOrgId();
+                  const { data, error } = await supabase
+                    .from('fera_groups')
+                    .insert([
+                      {
+                        organization_id: orgId,
+                        group_number: quickGroupNumber.trim().toUpperCase(),
+                        party_id: formData.partyId,
+                        name: quickGroupName.trim() || null,
+                        status: 'open',
+                      },
+                    ])
+                    .select('id, group_number, party_id, name, status')
+                    .single();
+
+                  if (error) throw error;
+
+                  setFeraGroups((prev) => [data, ...prev]);
+                  setFormData((prev) => ({ ...prev, feraGroupId: data.id }));
+                  setShowQuickGroupModal(false);
+                } catch (err) {
+                  alert('Error creating group: ' + err.message);
+                } finally {
+                  setQuickGroupSaving(false);
+                }
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="text-xs font-bold text-amber-300 mb-1.5 block">Group Number *</label>
+                <input
+                  type="text"
+                  required
+                  value={quickGroupNumber}
+                  onChange={(e) => setQuickGroupNumber(e.target.value.toUpperCase())}
+                  placeholder="e.g. FG-000001"
+                  className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-3.5 py-2 text-sm text-white font-mono uppercase focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-amber-300 mb-1.5 block">Batch / Requirement Name</label>
+                <input
+                  type="text"
+                  value={quickGroupName}
+                  onChange={(e) => setQuickGroupName(e.target.value)}
+                  placeholder="e.g. October Material Requirement"
+                  className="w-full bg-[#070b14] border border-amber-500/30 rounded-xl px-3.5 py-2 text-sm text-white focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-amber-500/20">
+                <button
+                  type="button"
+                  onClick={() => setShowQuickGroupModal(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-300 hover:text-white bg-[#131c33] rounded-xl border border-slate-700 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={quickGroupSaving}
+                  className="flex items-center gap-2 px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl transition-all cursor-pointer"
+                >
+                  {quickGroupSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  <span>Create & Select Group</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
