@@ -1,28 +1,43 @@
+const rawBasePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+export const basePath = rawBasePath.endsWith("/") ? rawBasePath.slice(0, -1) : rawBasePath;
+
+export const getAssetPath = (path: string): string => {
+  if (!path) return "";
+  if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:")) {
+    return path;
+  }
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  return `${basePath}${cleanPath}`;
+};
+
 export const siteData = {
   company: {
     name: "Veda Transport",
+    legalName: "Veda Transport Logistics",
     tagline: "Fast, Safe & Reliable Logistics Solutions",
     established: "2016",
+    logoUrl: getAssetPath("/truck_logo.jpg"),
     logoText: "Veda Transport",
-    description: "Veda Transport is India's leading logistics and supply chain partner, providing comprehensive freight transportation, warehousing, and express delivery solutions. With over a decade of trust, a vast fleet, and advanced GPS tracking, we ensure your cargo reaches its destination safely and on time."
+    gstNumber: "24AAAAA0000A1Z5",
+    description: "Veda Transport is a trusted logistics and supply chain partner based in Surat, Gujarat. We provide comprehensive full truck load (FTL), regional freight transport, and express delivery solutions with dedicated fleet management, timely dispatch, and live tracking."
   },
 
   contact: {
-    phone: "+91 98765 43210",
-    phoneDial: "+919876543210",
-    whatsapp: "+91 98765 43210",
-    whatsappDial: "+919876543210",
-    whatsappMessage: "Hello Veda Transport, I would like to inquire about your services.",
-    email: "info@vedatransport.in",
-    workingHours: "24/7 Service Available (Office Hours: 9:00 AM - 8:00 PM)"
+    phone: "+91 99784 44414",
+    phoneDial: "+919978444414",
+    whatsapp: "+91 99784 44414",
+    whatsappDial: "+919978444414",
+    whatsappMessage: "Hello Veda Transport, I would like to inquire about booking transport services.",
+    email: "vedatransport777@gmail.com",
+    workingHours: "24/7 Dispatch & Support (Office: 9:00 AM - 8:00 PM)"
   },
 
   address: {
-    line1: "Plot No. 42, Transport Nagar",
-    line2: "Sector 5, Near Main Expressway",
-    city: "New Delhi",
-    state: "Delhi",
-    pincode: "110044"
+    line1: "Desai Faliyu, Antorli",
+    line2: "Kamrej, Near Highway",
+    city: "Surat",
+    state: "Gujarat",
+    pincode: "394150"
   },
 
   social: {
@@ -33,7 +48,7 @@ export const siteData = {
   },
 
   map: {
-    embedUrl: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3505.776652195728!2d77.29524037599026!3d28.516353989354065!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x390ce15f9b4562ad%3A0xe54e634125b290cb!2sOkhla%20Phase%20I%2C%20Okhla%20Industrial%20Area%2C%20New%20Delhi%2C%20Delhi%20110020!5e0!3m2!1sen!2sin!4v1700000000000!5m2!1sen!2sin"
+    embedUrl: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d14875.526279930777!2d72.9567!3d21.2678!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3be04f4a30e44793%3A0xc3c5453e99ffc71b!2sAntroli%2C%20Gujarat%20394150!5e0!3m2!1sen!2sin!4v1700000000000!5m2!1sen!2sin"
   },
 
   hero: {

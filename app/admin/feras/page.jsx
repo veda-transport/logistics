@@ -32,7 +32,8 @@ import {
   Square,
   Boxes,
   Filter,
-  RotateCcw
+  RotateCcw,
+  Calculator
 } from 'lucide-react';
 import WhatsAppIcon from '@/components/WhatsAppIcon';
 import { supabase, getActiveOrgId, getNextFeraNumber, getNextFeraGroupNumber, uploadFileToCloudinary, deleteFileFromStorage } from '@/lib/supabase';
@@ -1408,6 +1409,15 @@ export default function FerasPage() {
 
             {/* Top Right Action Buttons */}
             <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href="/admin/calculator"
+                className="px-3.5 py-2 rounded-xl bg-[#0c1220] hover:bg-[#131c33] border border-amber-500/30 text-amber-300 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                title="Open Single Fera Profit & Rate Calculator"
+              >
+                <Calculator className="w-4 h-4 text-amber-400 stroke-[2.5]" />
+                <span>Rate Calculator</span>
+              </Link>
+
               <button
                 onClick={fetchData}
                 className="p-2.5 rounded-xl bg-[#0c1220] hover:bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"

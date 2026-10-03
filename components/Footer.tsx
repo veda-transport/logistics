@@ -34,13 +34,22 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-16">
           {/* Column 1: Company Profile */}
           <div className="space-y-6">
-            <a href="#home" className="flex items-center space-x-2">
-              <div className="w-9 h-9 rounded-lg bg-accent flex items-center justify-center">
-                <span className="font-display font-black text-primary text-lg">V</span>
+            <a href="#home" className="flex items-center space-x-3 group">
+              <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/10 p-0.5 border border-white/15 shadow-glow shadow-accent/20 shrink-0">
+                <img
+                  src={siteData.company.logoUrl}
+                  alt={siteData.company.name}
+                  className="w-full h-full object-cover rounded-lg"
+                />
               </div>
-              <span className="font-display font-extrabold text-xl tracking-tight text-white">
-                {siteData.company.name}
-              </span>
+              <div className="flex flex-col">
+                <span className="font-display font-extrabold text-xl tracking-tight text-white group-hover:text-accent transition-colors">
+                  {siteData.company.name}
+                </span>
+                <span className="text-[10px] font-bold text-accent uppercase tracking-wider">
+                  Gujarat • India
+                </span>
+              </div>
             </a>
             <p className="text-gray-400 text-sm leading-relaxed">
               {siteData.company.description}

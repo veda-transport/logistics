@@ -23,6 +23,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://vedatransport.in"),
   title: {
     default: `${siteData.company.name} | ${siteData.company.tagline}`,
     template: `%s | ${siteData.company.name}`,
@@ -30,15 +31,17 @@ export const metadata: Metadata = {
   description: siteData.company.description,
   keywords: [
     "Veda Transport",
-    "Logistics Delhi",
+    "Veda Transport Logistics",
+    "Logistics Surat Gujarat",
+    "Kamrej Transport Service",
     "Full Truck Load India",
-    "Part Load Transport",
-    "Tempo service Delhi",
-    "Tata Ace booking",
-    "Packers and Movers India",
-    "Express delivery logistics",
+    "Part Load Transport Gujarat",
+    "Tempo service Surat",
+    "Tata Ace booking Gujarat",
+    "Packers and Movers Surat",
+    "Express delivery logistics India",
     "Indian transport company",
-    "Best transport company India",
+    "Best transport company Gujarat",
   ],
   authors: [{ name: siteData.company.name }],
   creator: siteData.company.name,
@@ -51,7 +54,7 @@ export const metadata: Metadata = {
     siteName: siteData.company.name,
     images: [
       {
-        url: "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1200&h=630&q=80",
+        url: "/truck_logo.jpg",
         width: 1200,
         height: 630,
         alt: `${siteData.company.name} Transport Fleet`,
@@ -62,7 +65,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: `${siteData.company.name} - ${siteData.company.tagline}`,
     description: siteData.company.description,
-    images: ["https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1200&h=630&q=80"],
+    images: ["/truck_logo.jpg"],
   },
   robots: {
     index: true,
@@ -87,10 +90,13 @@ export default function RootLayout({
     "@context": "https://schema.org",
     "@type": "CargoService",
     "name": siteData.company.name,
+    "legalName": siteData.company.legalName,
     "description": siteData.company.description,
     "url": "https://vedatransport.in",
     "telephone": siteData.contact.phoneDial,
-    "logo": "https://vedatransport.in/logo.png",
+    "email": siteData.contact.email,
+    "logo": "https://vedatransport.in/truck_logo.jpg",
+    "taxID": siteData.company.gstNumber,
     "address": {
       "@type": "PostalAddress",
       "streetAddress": `${siteData.address.line1}, ${siteData.address.line2}`,

@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { siteData } from "@/data/siteData";
-import { Phone, MessageSquare, ArrowUp } from "lucide-react";
+import { Phone, ArrowUp } from "lucide-react";
+import WhatsAppIcon from "@/components/WhatsAppIcon";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function FloatingButtons() {
@@ -73,15 +74,14 @@ export default function FloatingButtons() {
         rel="noopener noreferrer"
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.9 }}
-        className="p-4 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white shadow-premium shadow-emerald-500/20 flex items-center justify-center focus:outline-none"
+        className="p-3.5 rounded-full bg-[#25D366] hover:bg-[#20ba59] text-white shadow-premium shadow-emerald-500/20 flex items-center justify-center focus:outline-none"
         aria-label="Chat on WhatsApp"
       >
         <motion.div
           animate={{ scale: [1, 1.12, 1] }}
           transition={{ repeat: Infinity, duration: 2, ease: "easeInOut", delay: 0.5 }}
         >
-          {/* Custom WhatsApp Icon using Lucide MessageSquare */}
-          <MessageSquare className="w-6 h-6" />
+          <WhatsAppIcon className="w-6 h-6 text-white" />
         </motion.div>
       </motion.a>
     </div>

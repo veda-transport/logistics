@@ -90,6 +90,17 @@ export default function NewFeraPage() {
         const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
         const initialGroupId = urlParams ? urlParams.get('group_id') : null;
         const initialPartyId = urlParams ? urlParams.get('party_id') : null;
+        const isFromCalc = urlParams ? urlParams.get('from_calc') : null;
+
+        let calcPrefill = null;
+        if (isFromCalc && typeof window !== 'undefined') {
+          try {
+            const raw = window.sessionStorage.getItem('veda_calc_fera_prefill');
+            if (raw) calcPrefill = JSON.parse(raw);
+          } catch (e) {
+            console.warn('Error reading calc prefill:', e);
+          }
+        }
 
         const [pRes, tRes, dRes, mRes, lRes, gRes] = await Promise.all([
           supabase.from('parties').select('id, name').eq('organization_id', orgId),
@@ -127,7 +138,7 @@ export default function NewFeraPage() {
         const defaultComm = defaultDriver?.commission_value || 0;
 
         // Find party from group if group_id is given
-        let selectedPartyId = initialPartyId || pList[0]?.id || '';
+        let selectedPartyId = calcPrefill?.partyId || initialPartyId || pList[0]?.id || '';
         let selectedGroupId = initialGroupId || '';
 
         if (initialGroupId && !initialPartyId) {
@@ -142,15 +153,22 @@ export default function NewFeraPage() {
           feraNumber: nextNum,
           partyId: selectedPartyId,
           feraGroupId: selectedGroupId,
-          truckId: tList[0]?.id || '',
-          driverId: defaultDriver?.id || '',
-          materialId: mList[0]?.id || '',
-          fromLocationId: lList[0]?.id || '',
-          toLocationId: lList[1]?.id || lList[0]?.id || '',
-          driverCommission: defaultComm,
+          truckId: calcPrefill?.truckId || tList[0]?.id || '',
+          driverId: calcPrefill?.driverId || defaultDriver?.id || '',
+          materialId: calcPrefill?.materialId || mList[0]?.id || '',
+          fromLocationId: calcPrefill?.fromLocationId || lList[0]?.id || '',
+          toLocationId: calcPrefill?.toLocationId || lList[1]?.id || lList[0]?.id || '',
+          weight: calcPrefill?.weight || prev.weight,
+          weightUnit: calcPrefill?.weightUnit || prev.weightUnit,
+          rateUnit: calcPrefill?.rateUnit || prev.rateUnit,
+          agreedAmount: calcPrefill?.agreedAmount || prev.agreedAmount,
+          driverCommission: calcPrefill?.driverCommission || defaultComm,
+          notes: calcPrefill?.notes || prev.notes,
         }));
 
-        if (defaultComm > 0) {
+        if (calcPrefill?.expenses && Array.isArray(calcPrefill.expenses) && calcPrefill.expenses.length > 0) {
+          setExpenses(calcPrefill.expenses);
+        } else if (defaultComm > 0) {
           setExpenses((prev) =>
             prev.map((exp) =>
               exp.expenseType === 'driver_commission' ? { ...exp, amount: String(defaultComm) } : exp

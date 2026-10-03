@@ -87,14 +87,23 @@ export default function Navbar() {
             <a
               href="#home"
               onClick={(e) => scrollToSection(e, "#home")}
-              className="flex items-center space-x-2 group focus:outline-none"
+              className="flex items-center space-x-3 group focus:outline-none"
             >
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-tr from-accent to-accent-light flex items-center justify-center shadow-glow shadow-accent/20">
-                <span className="font-display font-black text-primary text-xl">V</span>
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl overflow-hidden bg-white/10 p-0.5 border border-white/15 shadow-glow shadow-accent/20 flex items-center justify-center shrink-0">
+                <img
+                  src={siteData.company.logoUrl}
+                  alt={siteData.company.name}
+                  className="w-full h-full object-cover rounded-lg"
+                />
               </div>
-              <span className="font-display font-extrabold text-2xl tracking-tight text-white transition-colors duration-300 group-hover:text-accent">
-                {siteData.company.logoText}
-              </span>
+              <div className="flex flex-col">
+                <span className="font-display font-extrabold text-xl sm:text-2xl tracking-tight text-white transition-colors duration-300 group-hover:text-accent leading-none">
+                  {siteData.company.name}
+                </span>
+                <span className="text-[10px] font-bold text-accent uppercase tracking-widest mt-1">
+                  Logistics & Transport
+                </span>
+              </div>
             </a>
 
             {/* Desktop Navigation */}
@@ -181,15 +190,19 @@ export default function Navbar() {
               <div className="space-y-8">
                 {/* Header inside drawer */}
                 <div className="flex items-center justify-between pb-6 border-b border-white/5">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-8 h-8 rounded-md bg-accent flex items-center justify-center">
-                      <span className="font-display font-black text-primary text-base">V</span>
+                  <div className="flex items-center space-x-2.5">
+                    <div className="w-9 h-9 rounded-lg overflow-hidden bg-white/10 p-0.5 border border-white/15 shadow-glow shadow-accent/20 shrink-0">
+                      <img
+                        src={siteData.company.logoUrl}
+                        alt={siteData.company.name}
+                        className="w-full h-full object-cover rounded-md"
+                      />
                     </div>
-                    <span className="font-display font-bold text-lg">{siteData.company.logoText}</span>
+                    <span className="font-display font-bold text-lg text-white">{siteData.company.name}</span>
                   </div>
                   <button
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className="p-1 rounded-md bg-white/5 border border-white/10"
+                    className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-gray-300 hover:text-white"
                   >
                     <X className="w-5 h-5" />
                   </button>

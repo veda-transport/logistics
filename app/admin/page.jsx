@@ -13,7 +13,8 @@ import {
   Truck,
   Sparkles,
   Calendar,
-  MapPin
+  MapPin,
+  Calculator
 } from 'lucide-react';
 import { supabase, getActiveOrgId } from '@/lib/supabase';
 
@@ -149,6 +150,13 @@ export default function AdminDashboardPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           <Link
+            href="/admin/calculator"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#0c1220] hover:bg-[#131c33] text-amber-300 font-bold rounded-xl border border-amber-500/30 text-xs sm:text-sm transition-all hover:scale-[1.02] shadow-md shadow-black/30"
+          >
+            <Calculator className="w-4 h-4 text-amber-400 stroke-[2.5]" />
+            <span>Rate & Profit Calculator</span>
+          </Link>
+          <Link
             href="/admin/feras"
             className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl shadow-lg shadow-amber-500/20 text-xs sm:text-sm transition-all hover:scale-[1.02] border border-amber-300/30"
           >
@@ -157,7 +165,7 @@ export default function AdminDashboardPage() {
           </Link>
           <Link
             href="/admin/parties/payments"
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#0c1220] hover:bg-[#131c33] text-amber-300 font-bold rounded-xl border border-amber-500/25 text-xs sm:text-sm transition-all"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#0c1220] hover:bg-[#131c33] text-slate-300 hover:text-white font-bold rounded-xl border border-slate-700/80 text-xs sm:text-sm transition-all"
           >
             <Receipt className="w-4 h-4" />
             <span>Record Payment</span>

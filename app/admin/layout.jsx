@@ -18,7 +18,8 @@ import {
   ShieldCheck, 
   Sparkles,
   Building2,
-  Boxes
+  Boxes,
+  Calculator
 } from 'lucide-react';
 
 export default function AdminLayout({ children }) {
@@ -35,6 +36,7 @@ export default function AdminLayout({ children }) {
 
   const navItems = [
     { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
+    { label: 'Trip Rate Calculator', href: '/admin/calculator', icon: Calculator },
     { label: 'Feras (Trips)', href: '/admin/feras', icon: Truck },
     { label: 'Fera Groups', href: '/admin/fera-groups', icon: Boxes },
     { label: 'Parties & Ledger', href: '/admin/parties', icon: DollarSign },

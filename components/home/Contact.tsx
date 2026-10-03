@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
+import WhatsAppIcon from "@/components/WhatsAppIcon";
 import { siteData } from "@/data/siteData";
-import { Phone, Mail, MapPin, Clock, Send, CheckCircle2, MessageSquare } from "lucide-react";
+import { Phone, Mail, MapPin, Clock, Send, CheckCircle2, ShieldCheck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function Contact() {
@@ -86,7 +88,29 @@ export default function Contact() {
           <div className="lg:col-span-5 space-y-8">
             {/* Quick Contacts details */}
             <div className="glass-panel p-8 rounded-3xl border border-white/5 space-y-6">
-              <h3 className="font-display font-extrabold text-xl text-white">Contact Info</h3>
+              {/* Company Branding & Logo */}
+              <div className="flex items-center space-x-3.5 pb-4 border-b border-white/10">
+                <div className="w-12 h-12 rounded-xl overflow-hidden border border-accent/30 bg-primary-light shrink-0 shadow-glow flex items-center justify-center p-0.5">
+                  <img
+                    src={siteData.company.logoUrl}
+                    alt={siteData.company.name}
+                    className="w-full h-full object-cover rounded-lg"
+                  />
+                </div>
+                <div>
+                  <h3 className="font-display font-extrabold text-lg text-white tracking-tight leading-tight">
+                    {siteData.company.name}
+                  </h3>
+                  <div className="flex items-center gap-1.5 mt-0.5 text-xs text-accent">
+                    <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                    <span className="font-semibold tracking-wide">GST: {siteData.company.gstNumber}</span>
+                  </div>
+                </div>
+              </div>
+
+              <h4 className="font-display font-bold text-sm uppercase tracking-wider text-gray-400">
+                Official Head Office
+              </h4>
               
               <ul className="space-y-5">
                 <li className="flex items-start space-x-4">
@@ -106,7 +130,7 @@ export default function Contact() {
                     <Phone className="w-5 h-5" />
                   </div>
                   <div>
-                    <span className="block text-xs font-bold text-gray-500 uppercase tracking-wide">Call Phone Line</span>
+                    <span className="block text-xs font-bold text-gray-500 uppercase tracking-wide">Direct Dispatch Line</span>
                     <a
                       href={`tel:${siteData.contact.phoneDial}`}
                       className="text-gray-300 hover:text-accent text-sm mt-1 block font-semibold transition-colors"
@@ -141,6 +165,19 @@ export default function Contact() {
                   </div>
                 </li>
               </ul>
+
+              {/* WhatsApp Quick Action Button */}
+              <div className="pt-2">
+                <a
+                  href={`https://wa.me/${siteData.contact.whatsappDial}?text=${encodeURIComponent(siteData.contact.whatsappMessage)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2.5 w-full py-3 px-4 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:text-emerald-300 font-bold text-xs uppercase tracking-wider transition-all duration-300 shadow-sm"
+                >
+                  <WhatsAppIcon className="w-4 h-4 text-emerald-400" />
+                  <span>Chat With Us on WhatsApp</span>
+                </a>
+              </div>
             </div>
 
             {/* Google Map Embed */}
