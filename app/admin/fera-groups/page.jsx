@@ -23,8 +23,9 @@ import {
   Eye,
   Filter
 } from 'lucide-react';
+import WhatsAppIcon from '@/components/WhatsAppIcon';
 import { supabase, getActiveOrgId, getNextFeraGroupNumber } from '@/lib/supabase';
-import { generateFeraGroupBillPDF } from '@/lib/feraPdf';
+import { generateFeraGroupBillPDF, shareFeraGroupBillOnWhatsApp } from '@/lib/feraPdf';
 
 export default function FeraGroupsPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,6 +36,7 @@ export default function FeraGroupsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [generatingPdfGroupId, setGeneratingPdfGroupId] = useState(null);
+  const [sharingPdfGroupId, setSharingPdfGroupId] = useState(null);
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
@@ -318,6 +320,45 @@ export default function FeraGroupsPage() {
     }
   };
 
+  const handleShareGroupWhatsApp = async (group) => {
+    try {
+      setSharingPdfGroupId(group.id);
+      const orgId = await getActiveOrgId();
+      if (!orgId) return;
+
+      const party = parties.find((p) => p.id === group.party_id) || group.parties;
+
+      const { data: fullFeras, error } = await supabase
+        .from('feras')
+        .select(`
+          *,
+          trucks(id, truck_number, truck_type),
+          drivers(id, name),
+          materials(id, name, unit),
+          from_location:locations!feras_from_location_id_fkey(id, name, city),
+          to_location:locations!feras_to_location_id_fkey(id, name, city),
+          fera_expenses(*)
+        `)
+        .eq('organization_id', orgId)
+        .eq('fera_group_id', group.id)
+        .order('fera_date', { ascending: true });
+
+      if (error) throw error;
+
+      await shareFeraGroupBillOnWhatsApp({
+        group,
+        party,
+        feras: fullFeras || [],
+        asOfDate: new Date(),
+      });
+    } catch (err) {
+      console.error('Error sharing group bill on WhatsApp:', err);
+      alert('Error sharing Group Bill on WhatsApp: ' + err.message);
+    } finally {
+      setSharingPdfGroupId(null);
+    }
+  };
+
   // Filter groups
   const filteredGroups = groups.filter((g) => {
     const matchesSearch =
@@ -515,6 +556,19 @@ export default function FeraGroupsPage() {
                     </div>
 
                     <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleShareGroupWhatsApp(group)}
+                        disabled={sharingPdfGroupId === group.id}
+                        className="p-2.5 bg-[#25D366]/15 hover:bg-[#25D366]/25 border border-[#25D366]/30 text-[#25D366] hover:text-white rounded-xl transition-all cursor-pointer shadow-sm"
+                        title="Share Group Bill on WhatsApp"
+                      >
+                        {sharingPdfGroupId === group.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-[#25D366]" />
+                        ) : (
+                          <WhatsAppIcon className="w-4 h-4 fill-[#25D366]" />
+                        )}
+                      </button>
+
                       <button
                         onClick={() => handleDownloadGroupPDF(group)}
                         disabled={generatingPdfGroupId === group.id}

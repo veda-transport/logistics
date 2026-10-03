@@ -34,8 +34,9 @@ import {
   Filter,
   RotateCcw
 } from 'lucide-react';
+import WhatsAppIcon from '@/components/WhatsAppIcon';
 import { supabase, getActiveOrgId, getNextFeraNumber, getNextFeraGroupNumber, uploadFileToCloudinary, deleteFileFromStorage } from '@/lib/supabase';
-import { generateSingleFeraPDF, generateFilteredFerasPDF, generateMultiFeraVouchersPDF, generatePartyBillPDF } from '@/lib/feraPdf';
+import { generateSingleFeraPDF, generateFilteredFerasPDF, generateMultiFeraVouchersPDF, generatePartyBillPDF, sharePartyBillOnWhatsApp } from '@/lib/feraPdf';
 
 const initialExpenses = [
   { expenseType: 'diesel', description: 'Diesel Filling', amount: '', quantity: '', rate: '', unit: 'litres' },
@@ -53,6 +54,8 @@ export default function FerasPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [generatingFilteredPartyBill, setGeneratingFilteredPartyBill] = useState(false);
+  const [sharingFilteredPartyBill, setSharingFilteredPartyBill] = useState(false);
+  const [sharingSelectedPartyBill, setSharingSelectedPartyBill] = useState(false);
   const [feras, setFeras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -700,6 +703,108 @@ export default function FerasPage() {
       alert('Error generating PDF bill: ' + err.message);
     } finally {
       setGeneratingFilteredPartyBill(false);
+    }
+  };
+
+  // WhatsApp Share Party Bill for Selected Trips
+  const handleSharePartyBillForSelectedWhatsApp = async () => {
+    if (selectedFerasList.length === 0) {
+      alert('Please select at least one trip to share party bill.');
+      return;
+    }
+
+    setSharingSelectedPartyBill(true);
+    try {
+      const firstFera = selectedFerasList[0];
+      const targetPartyId = firstFera?.party_id;
+
+      let fullParty = parties.find((p) => p.id === targetPartyId);
+      if ((!fullParty || !fullParty.address) && targetPartyId) {
+        const { data: pData } = await supabase.from('parties').select('*').eq('id', targetPartyId).single();
+        if (pData) fullParty = pData;
+      }
+
+      if (!fullParty && firstFera?.parties) {
+        fullParty = firstFera.parties;
+      }
+
+      if (!fullParty) {
+        fullParty = {
+          name: firstFera?.parties?.name || 'Party Client',
+          phone: '',
+          address: '',
+          gst_number: '',
+        };
+      }
+
+      await sharePartyBillOnWhatsApp({
+        party: fullParty,
+        feras: selectedFerasList,
+        asOfDate: new Date(),
+      });
+    } catch (err) {
+      console.error('Error sharing party bill on WhatsApp:', err);
+      alert('Error sharing bill on WhatsApp: ' + err.message);
+    } finally {
+      setSharingSelectedPartyBill(false);
+    }
+  };
+
+  // WhatsApp Share Party Bill for currently Filtered Trips (or Selected)
+  const handleSharePartyBillForFilteredWhatsApp = async () => {
+    const targetList = selectedFerasList.length > 0 ? selectedFerasList : filteredFeras;
+    if (targetList.length === 0) {
+      alert('No trips match current filters to share bill.');
+      return;
+    }
+
+    setSharingFilteredPartyBill(true);
+    try {
+      let targetPartyId = partyFilter !== 'All' ? partyFilter : null;
+      if (!targetPartyId) {
+        const uniqueParties = Array.from(new Set(targetList.map((f) => f.party_id).filter(Boolean)));
+        if (uniqueParties.length === 1) {
+          targetPartyId = uniqueParties[0];
+        } else if (uniqueParties.length > 1) {
+          alert('Current view contains trips for multiple parties. Please select a specific Party in the filter dropdown to share their bill on WhatsApp.');
+          setSharingFilteredPartyBill(false);
+          return;
+        }
+      }
+
+      if (!targetPartyId) {
+        targetPartyId = targetList[0]?.party_id;
+      }
+
+      let fullParty = parties.find((p) => p.id === targetPartyId);
+      if ((!fullParty || !fullParty.address) && targetPartyId) {
+        const { data: pData } = await supabase.from('parties').select('*').eq('id', targetPartyId).single();
+        if (pData) fullParty = pData;
+      }
+
+      if (!fullParty && targetList[0]?.parties) {
+        fullParty = targetList[0].parties;
+      }
+
+      if (!fullParty) {
+        fullParty = {
+          name: targetList[0]?.parties?.name || 'Party Client',
+          phone: '',
+          address: '',
+          gst_number: '',
+        };
+      }
+
+      await sharePartyBillOnWhatsApp({
+        party: fullParty,
+        feras: targetList,
+        asOfDate: new Date(),
+      });
+    } catch (err) {
+      console.error('Error sharing party bill on WhatsApp:', err);
+      alert('Error sharing bill on WhatsApp: ' + err.message);
+    } finally {
+      setSharingFilteredPartyBill(false);
     }
   };
 
@@ -1444,6 +1549,21 @@ export default function FerasPage() {
                 )}
 
                 <button
+                  type="button"
+                  onClick={handleSharePartyBillForFilteredWhatsApp}
+                  disabled={sharingFilteredPartyBill || filteredFeras.length === 0}
+                  className="px-3.5 py-2 bg-[#25D366]/15 hover:bg-[#25D366]/25 text-[#25D366] font-bold text-xs sm:text-sm rounded-xl border border-[#25D366]/35 shadow-lg shadow-emerald-950/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  title="Share Party Bill via WhatsApp for currently filtered trips"
+                >
+                  {sharingFilteredPartyBill ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-[#25D366]" />
+                  ) : (
+                    <WhatsAppIcon className="w-4 h-4 fill-[#25D366]" />
+                  )}
+                  <span>WhatsApp Bill</span>
+                </button>
+
+                <button
                   onClick={handleDownloadPartyBillForFiltered}
                   disabled={generatingFilteredPartyBill || filteredFeras.length === 0}
                   className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer border border-emerald-300/40 disabled:opacity-50"
@@ -1454,7 +1574,7 @@ export default function FerasPage() {
                   ) : (
                     <Receipt className="w-4 h-4 stroke-[2.5]" />
                   )}
-                  <span>Generate Party Bill PDF ({filteredFeras.length})</span>
+                  <span>Party Bill PDF ({filteredFeras.length})</span>
                 </button>
               </div>
             </div>
@@ -1601,6 +1721,21 @@ export default function FerasPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSharePartyBillForSelectedWhatsApp}
+                  disabled={sharingSelectedPartyBill}
+                  className="px-3.5 py-2 bg-[#25D366]/20 hover:bg-[#25D366]/30 border border-[#25D366]/40 text-[#25D366] font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="Share Party Bill for Selected Trips on WhatsApp"
+                >
+                  {sharingSelectedPartyBill ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[#25D366]" />
+                  ) : (
+                    <WhatsAppIcon className="w-3.5 h-3.5 fill-[#25D366]" />
+                  )}
+                  <span>WhatsApp Bill</span>
+                </button>
+
                 <button
                   onClick={handleDownloadPartyBillForSelected}
                   className="px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer border border-emerald-300/40"

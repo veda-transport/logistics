@@ -22,8 +22,9 @@ import {
   Sparkles,
   FileDown
 } from 'lucide-react';
+import WhatsAppIcon from '@/components/WhatsAppIcon';
 import { supabase, getActiveOrgId } from '@/lib/supabase';
-import { generatePartyBillPDF } from '@/lib/feraPdf';
+import { generatePartyBillPDF, sharePartyBillOnWhatsApp } from '@/lib/feraPdf';
 
 export default function PartiesPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -32,6 +33,7 @@ export default function PartiesPage() {
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [generatingBillPartyId, setGeneratingBillPartyId] = useState(null);
+  const [sharingPartyId, setSharingPartyId] = useState(null);
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
@@ -206,6 +208,45 @@ export default function PartiesPage() {
       alert('Error generating PDF bill: ' + err.message);
     } finally {
       setGeneratingBillPartyId(null);
+    }
+  };
+
+  const handleSharePartyBillWhatsApp = async (party) => {
+    try {
+      setSharingPartyId(party.id);
+      const orgId = await getActiveOrgId();
+      if (!orgId) return;
+
+      const { data: partyFeras, error } = await supabase
+        .from('feras')
+        .select(`
+          *,
+          from_location:locations!feras_from_location_id_fkey(id, name, city),
+          to_location:locations!feras_to_location_id_fkey(id, name, city),
+          trucks(id, truck_number, truck_type),
+          materials(id, name, unit)
+        `)
+        .eq('organization_id', orgId)
+        .eq('party_id', party.id)
+        .order('fera_date', { ascending: false });
+
+      if (error) throw error;
+
+      if (!partyFeras || partyFeras.length === 0) {
+        alert(`No trip records found for ${party.name}.`);
+        return;
+      }
+
+      await sharePartyBillOnWhatsApp({
+        party,
+        feras: partyFeras,
+        asOfDate: new Date(),
+      });
+    } catch (err) {
+      console.error('Error sharing party bill on WhatsApp:', err);
+      alert('Error sharing bill on WhatsApp: ' + err.message);
+    } finally {
+      setSharingPartyId(null);
     }
   };
 
@@ -484,6 +525,19 @@ export default function PartiesPage() {
 
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-amber-500/10">
                   <button
+                    onClick={() => handleSharePartyBillWhatsApp(party)}
+                    disabled={sharingPartyId === party.id}
+                    className="px-2.5 py-1.5 bg-[#25D366]/15 hover:bg-[#25D366]/25 border border-[#25D366]/30 text-[#25D366] rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+                    title="Share Party Bill via WhatsApp"
+                  >
+                    {sharingPartyId === party.id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-[#25D366]" />
+                    ) : (
+                      <WhatsAppIcon className="w-3.5 h-3.5 fill-[#25D366]" />
+                    )}
+                    <span>WhatsApp</span>
+                  </button>
+                  <button
                     onClick={() => handleDownloadPartyBill(party)}
                     disabled={generatingBillPartyId === party.id}
                     className="px-2.5 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1 transition cursor-pointer"
@@ -569,6 +623,18 @@ export default function PartiesPage() {
                       </td>
                       <td className="py-4 px-4 text-center">
                         <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => handleSharePartyBillWhatsApp(party)}
+                            disabled={sharingPartyId === party.id}
+                            className="p-2 text-[#25D366] hover:text-white hover:bg-[#25D366]/20 border border-[#25D366]/30 hover:border-[#25D366]/50 rounded-xl transition-all cursor-pointer shadow-sm"
+                            title="Share Party Bill on WhatsApp"
+                          >
+                            {sharingPartyId === party.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-[#25D366]" />
+                            ) : (
+                              <WhatsAppIcon className="w-4 h-4 fill-[#25D366]" />
+                            )}
+                          </button>
                           <button
                             onClick={() => handleDownloadPartyBill(party)}
                             disabled={generatingBillPartyId === party.id}

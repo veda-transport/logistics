@@ -27,8 +27,9 @@ import {
   ExternalLink,
   RefreshCw
 } from 'lucide-react';
+import WhatsAppIcon from '@/components/WhatsAppIcon';
 import { supabase, getActiveOrgId } from '@/lib/supabase';
-import { generateFeraGroupBillPDF, generateSingleFeraPDF } from '@/lib/feraPdf';
+import { generateFeraGroupBillPDF, generateSingleFeraPDF, shareFeraGroupBillOnWhatsApp } from '@/lib/feraPdf';
 
 function FeraGroupDetailContent() {
   const searchParams = useSearchParams();
@@ -40,6 +41,7 @@ function FeraGroupDetailContent() {
   const [feras, setFeras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState(false);
 
   // Modal to assign existing unassigned feras to this group
@@ -214,6 +216,23 @@ function FeraGroupDetailContent() {
     }
   };
 
+  const handleShareWhatsApp = async () => {
+    try {
+      setSharingWhatsApp(true);
+      await shareFeraGroupBillOnWhatsApp({
+        group,
+        party,
+        feras,
+        asOfDate: new Date(),
+      });
+    } catch (err) {
+      console.error('Error sharing on WhatsApp:', err);
+      alert('Error sharing on WhatsApp: ' + err.message);
+    } finally {
+      setSharingWhatsApp(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
@@ -329,6 +348,22 @@ function FeraGroupDetailContent() {
                 <option value="cancelled">Cancelled</option>
               </select>
             </div>
+
+            {/* WhatsApp Share Button */}
+            <button
+              type="button"
+              onClick={handleShareWhatsApp}
+              disabled={sharingWhatsApp || feras.length === 0}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#25D366]/20 hover:bg-[#25D366]/30 border border-[#25D366]/40 text-[#25D366] font-black text-xs sm:text-sm rounded-2xl shadow-lg transition-all cursor-pointer disabled:opacity-50"
+              title="Share Group Bill on WhatsApp"
+            >
+              {sharingWhatsApp ? (
+                <Loader2 className="w-4 h-4 animate-spin text-[#25D366]" />
+              ) : (
+                <WhatsAppIcon className="w-4 h-4 fill-[#25D366]" />
+              )}
+              <span>WhatsApp Bill</span>
+            </button>
 
             {/* Download PDF Button */}
             <button
